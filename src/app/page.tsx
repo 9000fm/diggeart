@@ -13,9 +13,9 @@ export default function Home() {
               </svg>
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight">cratedig</h1>
+              <h1 className="text-lg font-bold tracking-tight">dig.art</h1>
               <p className="text-[10px] text-zinc-500 -mt-0.5 uppercase tracking-widest">
-                dig deeper
+                music discovery
               </p>
             </div>
           </div>
