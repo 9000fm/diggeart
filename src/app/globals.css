@@ -1,13 +1,44 @@
 @import "tailwindcss";
 
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
+  --sidebar-width: 80px;
+  --banner-height: 32px;
+  --header-height: 68px;
+
+  /* Light theme (default) */
+  --bg: #ffffff;
+  --bg-alt: #f4f4f5;
+  --bg-card: #fafafa;
+  --bg-overlay: rgba(0, 0, 0, 0.5);
+  --text: #18181b;
+  --text-secondary: #71717a;
+  --text-muted: #a1a1aa;
+  --border: #e4e4e7;
+  --accent: #18181b;
+  --accent-text: #ffffff;
+}
+
+[data-theme="dark"] {
+  --bg: #09090b;
+  --bg-alt: #18181b;
+  --bg-card: #18181b;
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+  --text: #fafafa;
+  --text-secondary: #71717a;
+  --text-muted: #52525b;
+  --border: #27272a;
+  --accent: #ffffff;
+  --accent-text: #000000;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--text);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
 /* Hide scrollbar for genre filter */
@@ -17,4 +48,71 @@ body {
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Thin scrollbar for sidebar */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+}
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}
+
+/* Scrolling marquee banner */
+.marquee-track {
+  animation: marquee-scroll 40s linear infinite;
+  will-change: transform;
+}
+
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--bg-alt) 25%,
+    var(--border) 50%,
+    var(--bg-alt) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* EQ bars animation for now-playing */
+@keyframes eq-bar {
+  0%, 100% { height: 15%; }
+  50% { height: 90%; }
+}
+
+.eq-bar {
+  animation: eq-bar 0.8s ease-in-out infinite;
+}
+
+/* Now-playing banner scrolling text */
+.nowplaying-track {
+  animation: marquee-scroll 15s linear infinite;
+  will-change: transform;
 }
