@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Space_Mono } from "next/font/google";
+import ThemeProvider from "@/components/ThemeProvider";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const spaceMono = Space_Mono({ subsets: ["latin"], weight: ["400", "700"] });
 
 export const metadata: Metadata = {
-  title: "Superself — Music Discovery",
-  description: "Pinterest-style music discovery powered by Spotify",
+  title: "digeart — music discovery",
+  description: "Music discovery for diggers & curators. Spotify + YouTube.",
 };
 
 export default function RootLayout({
@@ -15,9 +16,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} antialiased bg-black`}>
-        {children}
+    <html lang="en">
+      <body className={`${spaceMono.className} antialiased`}>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );
