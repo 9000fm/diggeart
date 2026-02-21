@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import MusicCard from "./MusicCard";
 import type { CardData } from "@/lib/types";
 
-interface MixesGridProps {
+interface SamplesGridProps {
   savedIds: Set<string>;
   likedIds: Set<string>;
   playingId: string | null;
@@ -12,9 +12,11 @@ interface MixesGridProps {
   onToggleSave: (id: string) => void;
   onToggleLike: (id: string) => void;
   onCardsLoaded?: (cards: CardData[]) => void;
+  onProgress?: (current: number, duration: number) => void;
+  seekTo?: number | null;
 }
 
-export default function MixesGrid({
+export default function SamplesGrid({
   savedIds,
   likedIds,
   playingId,
@@ -22,27 +24,29 @@ export default function MixesGrid({
   onToggleSave,
   onToggleLike,
   onCardsLoaded,
-}: MixesGridProps) {
+  onProgress,
+  seekTo,
+}: SamplesGridProps) {
   const [cards, setCards] = useState<CardData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchMixes() {
+    async function fetchSamples() {
       setLoading(true);
       try {
-        const res = await fetch("/api/mixes");
+        const res = await fetch("/api/samples");
         const data = await res.json();
         const loaded = data.cards || [];
         setCards(loaded);
         onCardsLoaded?.(loaded);
       } catch (err) {
-        console.error("Failed to fetch mixes:", err);
+        console.error("Failed to fetch samples:", err);
       } finally {
         setLoading(false);
       }
     }
-    fetchMixes();
-  }, []);
+    fetchSamples();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shareCard = async (card: CardData) => {
     const url = card.youtubeUrl || "";
@@ -59,7 +63,7 @@ export default function MixesGrid({
   if (loading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-3 lg:gap-5 p-1.5 sm:p-3 lg:p-4">
-        {Array.from({ length: 10 }).map((_, i) => (
+        {Array.from({ length: 15 }).map((_, i) => (
           <div
             key={i}
             className="aspect-square skeleton-shimmer rounded-lg"
@@ -72,15 +76,12 @@ export default function MixesGrid({
   if (cards.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <svg className="w-12 h-12 text-[var(--text-muted)] mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-          <line x1="4" y1="10" x2="4" y2="14" />
-          <line x1="8" y1="6" x2="8" y2="18" />
-          <line x1="12" y1="4" x2="12" y2="20" />
-          <line x1="16" y1="8" x2="16" y2="16" />
-          <line x1="20" y1="7" x2="20" y2="17" />
+        <svg className="w-12 h-12 text-[var(--text-muted)] mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="3" />
         </svg>
-        <p className="font-mono text-sm text-[var(--text-muted)] uppercase">No mixes found</p>
-        <p className="font-mono text-[11px] text-[var(--text-muted)] mt-1">Approve more channels with DJ sets via /curator</p>
+        <p className="font-mono text-sm text-[var(--text-muted)] uppercase">No samples found</p>
+        <p className="font-mono text-[11px] text-[var(--text-muted)] mt-1">Approve more channels with niche labels via /curator</p>
       </div>
     );
   }
@@ -98,6 +99,8 @@ export default function MixesGrid({
           onLike={() => onToggleLike(card.id)}
           onSave={() => onToggleSave(card.id)}
           onShare={() => shareCard(card)}
+          onProgress={playingId === card.id ? onProgress : undefined}
+          seekTo={playingId === card.id ? seekTo : undefined}
         />
       ))}
     </div>

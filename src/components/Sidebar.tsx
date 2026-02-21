@@ -87,34 +87,40 @@ const NAV_ITEMS: NavItem[] = [
   {
     key: "samples",
     label: "Samples",
-    icon: (active) => (
-      <svg className="w-6 h-6" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke={active ? "none" : "currentColor"} strokeWidth={2}>
-        {active ? (
-          <path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z" />
-        ) : (
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.34A1 1 0 0017.93 1.4L9.428 3.97A1 1 0 008.5 4.93V14" />
-        )}
-      </svg>
-    ),
+    icon: (active) =>
+      active ? (
+        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+          <path fillRule="evenodd" clipRule="evenodd"
+            d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 8a2 2 0 100 4 2 2 0 000-4z" />
+        </svg>
+      ) : (
+        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="2" />
+        </svg>
+      ),
   },
   {
     key: "mixes",
     label: "Mixes",
-    icon: (active) => (
-      <svg className="w-6 h-6" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke={active ? "none" : "currentColor"} strokeWidth={2}>
-        {active ? (
-          <path d="M3 9v6h2V9H3zm4-3v12h2V6H7zm4-2v16h2V4h-2zm4 4v8h2V8h-2zm4-1v10h2V7h-2z" />
-        ) : (
-          <>
-            <path strokeLinecap="round" d="M4 9v6" />
-            <path strokeLinecap="round" d="M8 6v12" />
-            <path strokeLinecap="round" d="M12 4v16" />
-            <path strokeLinecap="round" d="M16 8v8" />
-            <path strokeLinecap="round" d="M20 7v10" />
-          </>
-        )}
-      </svg>
-    ),
+    icon: (active) =>
+      active ? (
+        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="3" y="10" width="2" height="4" rx="1" />
+          <rect x="7" y="6" width="2" height="12" rx="1" />
+          <rect x="11" y="4" width="2" height="16" rx="1" />
+          <rect x="15" y="8" width="2" height="8" rx="1" />
+          <rect x="19" y="7" width="2" height="10" rx="1" />
+        </svg>
+      ) : (
+        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+          <line x1="4" y1="10" x2="4" y2="14" />
+          <line x1="8" y1="6" x2="8" y2="18" />
+          <line x1="12" y1="4" x2="12" y2="20" />
+          <line x1="16" y1="8" x2="16" y2="16" />
+          <line x1="20" y1="7" x2="20" y2="17" />
+        </svg>
+      ),
   },
   {
     key: "saved",
@@ -122,9 +128,9 @@ const NAV_ITEMS: NavItem[] = [
     icon: (active) => (
       <svg className="w-6 h-6" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke={active ? "none" : "currentColor"} strokeWidth={2}>
         {active ? (
-          <path d="M5 2h14a1 1 0 011 1v19.143a.5.5 0 01-.766.424L12 18.03l-7.234 4.536A.5.5 0 014 22.143V3a1 1 0 011-1z" />
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
         ) : (
-          <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
         )}
       </svg>
     ),
@@ -136,6 +142,7 @@ interface SidebarProps {
   onViewChange: (view: ViewType) => void;
   activeGenre: number;
   onGenreChange: (index: number) => void;
+  hasPlayer?: boolean;
 }
 
 export { GENRE_PRESETS };
@@ -162,11 +169,10 @@ export default function Sidebar({
   onViewChange,
   activeGenre,
   onGenreChange,
+  hasPlayer,
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [placeholder, setPlaceholder] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const phraseIndex = useRef(
     Math.floor(Math.random() * SEARCH_PHRASES.length)
   );
@@ -174,20 +180,15 @@ export default function Sidebar({
   const isDeleting = useRef(false);
 
   const bannerText = useMemo(() => {
+    const SEPARATORS = ["✦", "◆", "●", "▲", "■", "♦", "◉", "✧", "♫", "◐", "▸"];
     const shuffled = shuffleArray(BANNER_PHRASES);
-    return shuffled.join("  ✦  ");
+    return shuffled
+      .map((phrase, i) => {
+        const sep = SEPARATORS[Math.floor(Math.random() * SEPARATORS.length)];
+        return i < shuffled.length - 1 ? `${phrase}   ${sep}   ` : phrase;
+      })
+      .join("");
   }, []);
-
-  useEffect(() => {
-    if (mobileOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [mobileOpen]);
 
   useEffect(() => {
     const tick = () => {
@@ -220,16 +221,22 @@ export default function Sidebar({
       <div className="fixed top-0 left-0 right-0 z-[60] h-[var(--banner-height)] bg-[var(--accent)] text-[var(--accent-text)] overflow-hidden flex items-center">
         <div className="marquee-track inline-flex whitespace-nowrap">
           <span className="font-mono text-[10px] uppercase tracking-[0.3em] shrink-0 px-2">
-            {bannerText}  ✦
+            {bannerText}   ✦
           </span>
           <span className="font-mono text-[10px] uppercase tracking-[0.3em] shrink-0 px-2">
-            {bannerText}  ✦
+            {bannerText}   ✦
           </span>
         </div>
       </div>
 
       {/* ===== DESKTOP: Fixed header bar ===== */}
-      <header className="hidden lg:flex fixed top-[var(--banner-height)] left-0 right-0 z-50 h-[var(--header-height)] bg-[var(--bg)] border-b border-[var(--border)] items-center px-5 gap-5">
+      <header
+        className="hidden lg:flex fixed left-0 right-0 z-50 h-[var(--header-height)] bg-[var(--bg)] border-b border-[var(--border)] items-center px-5 gap-5"
+        style={{
+          top: hasPlayer ? "calc(var(--banner-height) + var(--player-height))" : "var(--banner-height)",
+          transition: "top 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
+      >
         <span className="shrink-0 font-mono font-black text-2xl text-[var(--text)] uppercase tracking-[0.2em] select-none">
           DIGEART
         </span>
@@ -268,7 +275,18 @@ export default function Sidebar({
       </header>
 
       {/* ===== DESKTOP: Sidebar below header ===== */}
-      <aside className="hidden lg:flex fixed top-[calc(var(--banner-height)+var(--header-height))] left-0 z-40 h-[calc(100vh-var(--banner-height)-var(--header-height))] w-[var(--sidebar-width)] bg-[var(--bg)] border-r border-[var(--border)] text-[var(--text)] flex-col items-center py-4">
+      <aside
+        className="hidden lg:flex fixed left-0 z-40 w-[var(--sidebar-width)] bg-[var(--bg)] border-r border-[var(--border)] text-[var(--text)] flex-col items-center py-4"
+        style={{
+          top: hasPlayer
+            ? "calc(var(--banner-height) + var(--header-height) + var(--player-height))"
+            : "calc(var(--banner-height) + var(--header-height))",
+          height: hasPlayer
+            ? "calc(100vh - var(--banner-height) - var(--header-height) - var(--player-height))"
+            : "calc(100vh - var(--banner-height) - var(--header-height))",
+          transition: "top 0.4s cubic-bezier(0.22, 1, 0.36, 1), height 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
+      >
         <nav className="flex flex-col items-center flex-1 gap-0.5">
           {NAV_ITEMS.map((item) => {
             const isActive = activeView === item.key;
@@ -292,43 +310,22 @@ export default function Sidebar({
             );
           })}
         </nav>
-        <div className="relative w-full flex flex-col items-center gap-1">
-          {settingsOpen && (
-            <div className="absolute bottom-full mb-2 left-2 bg-[var(--bg)] border border-[var(--border)] rounded-xl p-3 shadow-lg w-48">
-              <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase tracking-widest block mb-3">
-                SETTINGS
-              </span>
-              <button
-                onClick={toggleTheme}
-                className="w-full flex items-center justify-center px-3 py-2 font-mono text-xl text-[var(--text-secondary)] hover:text-[var(--text)] rounded-lg hover:bg-[var(--bg-alt)] transition-colors"
-              >
-                {theme === "light" ? "☀" : "☾"}
-              </button>
-            </div>
-          )}
-          <div className="relative group/nav">
-            <button
-              onClick={() => setSettingsOpen(!settingsOpen)}
-              className={`w-12 h-12 flex items-center justify-center rounded-xl transition-all duration-200 ${
-                settingsOpen
-                  ? "text-[var(--text)] bg-[var(--bg-alt)]"
-                  : "text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)]"
-              }`}
-            >
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
-            <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-[var(--text)] text-[var(--bg)] rounded-lg font-mono text-xs whitespace-nowrap opacity-0 pointer-events-none group-hover/nav:opacity-100 transition-opacity duration-150 shadow-lg">
-              Settings
-            </div>
-          </div>
-        </div>
+        <button
+          onClick={toggleTheme}
+          className="w-12 h-12 flex items-center justify-center rounded-xl text-2xl text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)] transition-all duration-200"
+        >
+          {theme === "light" ? "☀" : "☾"}
+        </button>
       </aside>
 
       {/* ===== MOBILE: Fixed header bar ===== */}
-      <header className="flex lg:hidden fixed top-[var(--banner-height)] left-0 right-0 z-50 h-14 bg-[var(--bg)] border-b border-[var(--border)] items-center px-3 gap-3">
+      <header
+        className="flex lg:hidden fixed left-0 right-0 z-50 h-14 bg-[var(--bg)] border-b border-[var(--border)] items-center px-3 gap-3"
+        style={{
+          top: hasPlayer ? "calc(var(--banner-height) + var(--player-height))" : "var(--banner-height)",
+          transition: "top 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
+      >
         <span className="shrink-0 font-mono font-black text-base text-[var(--text)] uppercase tracking-[0.15em] select-none">
           DIGEART
         </span>
@@ -354,18 +351,23 @@ export default function Sidebar({
           />
         </div>
         <button
-          onClick={() => setMobileOpen(!mobileOpen)}
-          className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--bg-alt)] transition-colors"
-          aria-label="Menu"
+          onClick={toggleTheme}
+          className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)] transition-colors"
         >
-          <span className="font-mono text-sm text-[var(--text)]">
-            {mobileOpen ? "X" : "="}
-          </span>
+          {theme === "light" ? "☀" : "☾"}
         </button>
       </header>
 
       {/* ===== MOBILE: Nav icons below header ===== */}
-      <div className="flex lg:hidden fixed top-[calc(var(--banner-height)+3.5rem)] left-0 right-0 z-40 h-12 bg-[var(--bg)] border-b border-[var(--border)] items-center justify-center gap-1 px-3">
+      <div
+        className="flex lg:hidden fixed left-0 right-0 z-40 h-12 bg-[var(--bg)] border-b border-[var(--border)] items-center justify-center gap-1 px-3"
+        style={{
+          top: hasPlayer
+            ? "calc(var(--banner-height) + 3.5rem + var(--player-height))"
+            : "calc(var(--banner-height) + 3.5rem)",
+          transition: "top 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
+      >
         {NAV_ITEMS.map((item) => {
           const isActive = activeView === item.key;
           return (
@@ -382,55 +384,8 @@ export default function Sidebar({
             </button>
           );
         })}
-        <button
-          onClick={toggleTheme}
-          className="w-11 h-11 flex items-center justify-center text-xl rounded-xl text-[var(--text-muted)] hover:text-[var(--text)] transition-all duration-200"
-          title="Toggle theme"
-        >
-          {theme === "light" ? "☾" : "☀"}
-        </button>
       </div>
 
-      {/* ===== MOBILE: Overlay ===== */}
-      <div
-        className={`fixed inset-0 z-30 bg-[var(--bg-overlay)] transition-opacity duration-300 lg:hidden ${
-          mobileOpen
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
-        }`}
-        onClick={() => setMobileOpen(false)}
-      />
-
-      {/* ===== MOBILE: Drawer ===== */}
-      <div
-        className={`fixed top-[calc(var(--banner-height)+6.5rem)] left-0 right-0 z-30 bg-[var(--bg)] border-b border-[var(--border)] text-[var(--text)] shadow-2xl transition-transform duration-300 ease-out lg:hidden ${
-          mobileOpen ? "translate-y-0" : "-translate-y-[200%]"
-        }`}
-      >
-        <div className="p-3">
-          <span className="font-mono text-[10px] text-[var(--text-muted)] uppercase tracking-widest block mb-2">
-            GENRE
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {GENRE_PRESETS.map((preset, i) => (
-              <button
-                key={preset.label}
-                onClick={() => {
-                  onGenreChange(i);
-                  setMobileOpen(false);
-                }}
-                className={`px-3 py-2 font-mono text-xs uppercase rounded-full transition-all duration-200 ${
-                  i === activeGenre
-                    ? "bg-[var(--accent)] text-[var(--accent-text)]"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)]"
-                }`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
     </>
   );
 }
