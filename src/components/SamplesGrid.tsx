@@ -8,24 +8,22 @@ interface SamplesGridProps {
   savedIds: Set<string>;
   likedIds: Set<string>;
   playingId: string | null;
+  isPlaying: boolean;
   onPlay: (id: string) => void;
   onToggleSave: (id: string) => void;
   onToggleLike: (id: string) => void;
   onCardsLoaded?: (cards: CardData[]) => void;
-  onProgress?: (current: number, duration: number) => void;
-  seekTo?: number | null;
 }
 
 export default function SamplesGrid({
   savedIds,
   likedIds,
   playingId,
+  isPlaying,
   onPlay,
   onToggleSave,
   onToggleLike,
   onCardsLoaded,
-  onProgress,
-  seekTo,
 }: SamplesGridProps) {
   const [cards, setCards] = useState<CardData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,11 +60,11 @@ export default function SamplesGrid({
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-3 lg:gap-5 p-1.5 sm:p-3 lg:p-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-[11px] p-2 sm:p-[11px]">
         {Array.from({ length: 15 }).map((_, i) => (
           <div
             key={i}
-            className="aspect-square skeleton-shimmer rounded-lg"
+            className="aspect-square skeleton-shimmer rounded-md"
           />
         ))}
       </div>
@@ -87,20 +85,18 @@ export default function SamplesGrid({
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-3 lg:gap-5 p-1.5 sm:p-3 lg:p-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-[11px] p-2 sm:p-[11px]">
       {cards.map((card) => (
         <MusicCard
           key={card.id}
           card={card}
           liked={likedIds.has(card.id)}
           saved={savedIds.has(card.id)}
-          isPlaying={playingId === card.id}
+          isPlaying={playingId === card.id && isPlaying}
           onPlay={() => onPlay(card.id)}
           onLike={() => onToggleLike(card.id)}
           onSave={() => onToggleSave(card.id)}
           onShare={() => shareCard(card)}
-          onProgress={playingId === card.id ? onProgress : undefined}
-          seekTo={playingId === card.id ? seekTo : undefined}
         />
       ))}
     </div>

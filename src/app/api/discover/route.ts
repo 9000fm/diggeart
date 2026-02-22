@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRecommendations, getAudioFeatures } from "@/lib/spotify";
+import { searchTracks, getAudioFeatures } from "@/lib/spotify";
 import { discoverFromYouTube } from "@/lib/youtube";
 import type { CardData } from "@/lib/types";
 
@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
     Number(req.nextUrl.searchParams.get("limit") || 30),
     50
   );
+  const offset = Number(req.nextUrl.searchParams.get("offset") || 0);
   const source = req.nextUrl.searchParams.get("source") || "all";
 
   try {
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
 
     if (source === "spotify" || source === "all") {
       const spotifyLimit = source === "all" ? Math.ceil(limit * 0.6) : limit;
-      const tracks = await getRecommendations(genres, spotifyLimit);
+      const tracks = await searchTracks(genres, spotifyLimit, offset);
       const ids = tracks.map((t) => t.id);
       const features = await getAudioFeatures(ids);
 
@@ -49,6 +50,7 @@ export async function GET(req: NextRequest) {
           : null,
         key: features[t.id]?.key ?? null,
         duration: null,
+        viewCount: t.popularity ?? null,
       }));
 
       cards.push(...spotifyCards);
@@ -56,7 +58,7 @@ export async function GET(req: NextRequest) {
 
     if (source === "youtube" || source === "all") {
       const ytLimit = source === "all" ? Math.floor(limit * 0.4) : limit;
-      const ytCards = await discoverFromYouTube(ytLimit);
+      const ytCards = await discoverFromYouTube(ytLimit, offset);
       cards.push(...ytCards);
     }
 
@@ -65,7 +67,7 @@ export async function GET(req: NextRequest) {
       cards.sort(() => Math.random() - 0.5);
     }
 
-    return NextResponse.json({ cards });
+    return NextResponse.json({ cards, hasMore: true });
   } catch (err) {
     console.error("Discover API error:", err);
     return NextResponse.json({ error: "Failed to fetch" }, { status: 500 });

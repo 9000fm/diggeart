@@ -142,7 +142,6 @@ interface SidebarProps {
   onViewChange: (view: ViewType) => void;
   activeGenre: number;
   onGenreChange: (index: number) => void;
-  hasPlayer?: boolean;
 }
 
 export { GENRE_PRESETS };
@@ -169,7 +168,6 @@ export default function Sidebar({
   onViewChange,
   activeGenre,
   onGenreChange,
-  hasPlayer,
 }: SidebarProps) {
   const { theme, toggleTheme } = useTheme();
   const [placeholder, setPlaceholder] = useState("");
@@ -231,15 +229,14 @@ export default function Sidebar({
 
       {/* ===== DESKTOP: Fixed header bar ===== */}
       <header
-        className="hidden lg:flex fixed left-0 right-0 z-50 h-[var(--header-height)] bg-[var(--bg)] border-b border-[var(--border)] items-center px-5 gap-5"
-        style={{
-          top: hasPlayer ? "calc(var(--banner-height) + var(--player-height))" : "var(--banner-height)",
-          transition: "top 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
-        }}
+        className="hidden lg:flex fixed left-0 right-0 z-50 h-[var(--header-height)] bg-[var(--bg)]/80 backdrop-blur-md backdrop-saturate-150 border-b border-[var(--border)]/50 items-center px-2 gap-4"
+        style={{ top: "var(--banner-height)" }}
       >
-        <span className="shrink-0 font-mono font-black text-2xl text-[var(--text)] uppercase tracking-[0.2em] select-none">
-          DIGEART
-        </span>
+        <div className="shrink-0 min-w-[var(--sidebar-width)] flex justify-start pl-[5px]">
+          <span className="font-[family-name:var(--font-display)] text-4xl text-[var(--text)] tracking-[-0.04em] select-none">
+            digeart
+          </span>
+        </div>
 
         <div className="flex-1">
           <div className="relative">
@@ -278,13 +275,8 @@ export default function Sidebar({
       <aside
         className="hidden lg:flex fixed left-0 z-40 w-[var(--sidebar-width)] bg-[var(--bg)] border-r border-[var(--border)] text-[var(--text)] flex-col items-center py-4"
         style={{
-          top: hasPlayer
-            ? "calc(var(--banner-height) + var(--header-height) + var(--player-height))"
-            : "calc(var(--banner-height) + var(--header-height))",
-          height: hasPlayer
-            ? "calc(100vh - var(--banner-height) - var(--header-height) - var(--player-height))"
-            : "calc(100vh - var(--banner-height) - var(--header-height))",
-          transition: "top 0.4s cubic-bezier(0.22, 1, 0.36, 1), height 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
+          top: "calc(var(--banner-height) + var(--header-height))",
+          height: "calc(100vh - var(--banner-height) - var(--header-height))",
         }}
       >
         <nav className="flex flex-col items-center flex-1 gap-0.5">
@@ -312,7 +304,7 @@ export default function Sidebar({
         </nav>
         <button
           onClick={toggleTheme}
-          className="w-12 h-12 flex items-center justify-center rounded-xl text-2xl text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)] transition-all duration-200"
+          className="w-14 h-14 flex items-center justify-center rounded-xl text-3xl text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)] transition-all duration-200"
         >
           {theme === "light" ? "☀" : "☾"}
         </button>
@@ -320,14 +312,11 @@ export default function Sidebar({
 
       {/* ===== MOBILE: Fixed header bar ===== */}
       <header
-        className="flex lg:hidden fixed left-0 right-0 z-50 h-14 bg-[var(--bg)] border-b border-[var(--border)] items-center px-3 gap-3"
-        style={{
-          top: hasPlayer ? "calc(var(--banner-height) + var(--player-height))" : "var(--banner-height)",
-          transition: "top 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
-        }}
+        className="flex lg:hidden fixed left-0 right-0 z-50 h-14 bg-[var(--bg)]/80 backdrop-blur-md backdrop-saturate-150 border-b border-[var(--border)]/50 items-center px-2 gap-2"
+        style={{ top: "var(--banner-height)" }}
       >
-        <span className="shrink-0 font-mono font-black text-base text-[var(--text)] uppercase tracking-[0.15em] select-none">
-          DIGEART
+        <span className="shrink-0 font-[family-name:var(--font-display)] text-2xl text-[var(--text)] tracking-[-0.02em] select-none">
+          digeart
         </span>
         <div className="flex-1 relative">
           <svg
@@ -352,7 +341,7 @@ export default function Sidebar({
         </div>
         <button
           onClick={toggleTheme}
-          className="shrink-0 w-9 h-9 flex items-center justify-center rounded-full text-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)] transition-colors"
+          className="shrink-0 w-11 h-11 flex items-center justify-center rounded-full text-xl text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)] transition-colors"
         >
           {theme === "light" ? "☀" : "☾"}
         </button>
@@ -360,13 +349,8 @@ export default function Sidebar({
 
       {/* ===== MOBILE: Nav icons below header ===== */}
       <div
-        className="flex lg:hidden fixed left-0 right-0 z-40 h-12 bg-[var(--bg)] border-b border-[var(--border)] items-center justify-center gap-1 px-3"
-        style={{
-          top: hasPlayer
-            ? "calc(var(--banner-height) + 3.5rem + var(--player-height))"
-            : "calc(var(--banner-height) + 3.5rem)",
-          transition: "top 0.4s cubic-bezier(0.22, 1, 0.36, 1)",
-        }}
+        className="flex lg:hidden fixed left-0 right-0 z-40 h-12 bg-[var(--bg)] border-b border-[var(--border)] items-center justify-evenly px-0"
+        style={{ top: "calc(var(--banner-height) + var(--header-height-mobile))" }}
       >
         {NAV_ITEMS.map((item) => {
           const isActive = activeView === item.key;
@@ -374,9 +358,9 @@ export default function Sidebar({
             <button
               key={item.key}
               onClick={() => onViewChange(item.key)}
-              className={`w-11 h-11 flex items-center justify-center rounded-xl transition-all duration-200 ${
+              className={`flex-1 h-full flex items-center justify-center transition-all duration-200 ${
                 isActive
-                  ? "text-[var(--text)] bg-[var(--bg-alt)]"
+                  ? "text-[var(--text)]"
                   : "text-[var(--text-muted)] hover:text-[var(--text)]"
               }`}
             >

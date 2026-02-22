@@ -36,6 +36,7 @@ export interface SpotifyTrack {
   preview_url: string | null;
   external_urls: { spotify: string };
   uri: string;
+  popularity: number;
 }
 
 export interface AudioFeatures {
@@ -52,28 +53,48 @@ export function keyName(key: number): string {
   return key >= 0 && key < 12 ? KEY_NAMES[key] : "?";
 }
 
-export async function getRecommendations(
-  seedGenres: string[] = ["pop", "electronic", "hip-hop"],
-  limit = 30
+const GENRE_SEARCH_QUERIES: Record<string, string> = {
+  "electronic,house,techno": "house techno electronic",
+  "house,deep-house": "deep house",
+  "techno,minimal-techno": "techno minimal",
+  "electro,detroit-techno": "electro detroit techno",
+  "breakbeat,drum-and-bass": "breakbeat drum and bass",
+  "ambient,idm": "ambient idm",
+  "dub,dub-techno": "dub techno",
+  "disco,funk": "disco funk",
+};
+
+function genresToSearchQuery(genres: string[]): string {
+  const key = genres.join(",");
+  return GENRE_SEARCH_QUERIES[key] || genres.map((g) => g.replace(/-/g, " ")).join(" ");
+}
+
+export async function searchTracks(
+  genres: string[],
+  limit = 30,
+  offset = 0
 ): Promise<SpotifyTrack[]> {
   const token = await getAccessToken();
+  const q = genresToSearchQuery(genres);
   const params = new URLSearchParams({
-    seed_genres: seedGenres.join(","),
-    limit: String(limit),
+    q,
+    type: "track",
+    limit: String(Math.min(limit, 50)),
+    offset: String(offset),
   });
 
   const res = await fetch(
-    `https://api.spotify.com/v1/recommendations?${params}`,
+    `https://api.spotify.com/v1/search?${params}`,
     { headers: { Authorization: `Bearer ${token}` }, next: { revalidate: 300 } }
   );
 
   if (!res.ok) {
-    console.error("Spotify recommendations error:", res.status, await res.text());
+    console.error("Spotify search error:", res.status, await res.text());
     return [];
   }
 
   const data = await res.json();
-  return data.tracks || [];
+  return data.tracks?.items || [];
 }
 
 export async function getAudioFeatures(
