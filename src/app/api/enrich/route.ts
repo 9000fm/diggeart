@@ -1,19 +1,23 @@
 import { NextResponse } from "next/server";
-import { searchArtistGenres } from "@/lib/musicbrainz";
-import { getChannelUploads, parseVideoTitle } from "@/lib/youtube";
+import { searchArtistGenres as mbSearch } from "@/lib/musicbrainz";
+import { searchArtistGenres as discogsSearch } from "@/lib/discogs";
 import approvedChannels from "@/data/approved-channels.json";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 
 const CACHE_PATH = join(process.cwd(), "src/data/genre-cache.json");
 
+interface GenreCacheEntry {
+  mbGenres: string[];
+  mbTags: string[];
+  discogsGenres: string[];
+  discogsStyles: string[];
+  channelLabels: string[];
+  fetchedAt: string;
+}
+
 interface GenreCache {
-  [artistName: string]: {
-    mbId: string | null;
-    genres: string[];
-    tags: string[];
-    fetchedAt: string;
-  };
+  [key: string]: GenreCacheEntry;
 }
 
 function loadCache(): GenreCache {
@@ -28,69 +32,91 @@ function saveCache(cache: GenreCache) {
 }
 
 /**
- * GET /api/enrich?limit=5
- * Enriches approved channels by looking up artist genres on MusicBrainz.
- * Processes `limit` new artists per call (rate limited at 1req/sec).
- * Results are cached in genre-cache.json.
+ * GET /api/enrich?limit=5&source=discogs|musicbrainz|both
+ * 
+ * Enriches channels with genre data from MusicBrainz and/or Discogs.
+ * Uses CHANNEL NAME as the artist lookup (more reliable than video title parsing).
+ * Results cached in genre-cache.json.
+ * 
+ * Discogs needs DISCOGS_TOKEN in .env.local (free from discogs.com/settings/developers)
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const limit = Math.min(Number(url.searchParams.get("limit") || 5), 20);
+  const source = url.searchParams.get("source") || "both";
 
   const cache = loadCache();
-  const artistsSeen = new Set<string>();
-  const newResults: { artist: string; genres: string[]; tags: string[] }[] = [];
+  const newResults: {
+    channel: string;
+    discogsStyles: string[];
+    discogsGenres: string[];
+    mbGenres: string[];
+    mbTags: string[];
+  }[] = [];
 
-  // Collect unique artists from approved channels
-  const allArtists: string[] = [];
-  
-  for (const ch of approvedChannels as { name: string; id: string; labels?: string[] }[]) {
-    // Use channel name as a potential artist
-    const name = ch.name.trim();
-    if (name && !artistsSeen.has(name.toLowerCase()) && !cache[name.toLowerCase()]) {
-      artistsSeen.add(name.toLowerCase());
-      allArtists.push(name);
-    }
-  }
+  // Find channels not yet cached
+  const uncached = (approvedChannels as { name: string; id: string; labels?: string[] }[])
+    .filter((ch) => !cache[ch.id]);
 
-  // Process up to `limit` uncached artists
-  const toProcess = allArtists.slice(0, limit);
+  const toProcess = uncached.slice(0, limit);
 
-  for (const artist of toProcess) {
-    try {
-      const result = await searchArtistGenres(artist);
-      const entry = {
-        mbId: result?.id || null,
-        genres: result?.genres || [],
-        tags: result?.tags?.map((t) => t.name) || [],
-        fetchedAt: new Date().toISOString(),
-      };
-      cache[artist.toLowerCase()] = entry;
-      newResults.push({
-        artist,
-        genres: entry.genres,
-        tags: entry.tags.slice(0, 10),
-      });
-    } catch (e) {
-      console.error(`MusicBrainz lookup failed for "${artist}":`, e);
-      cache[artist.toLowerCase()] = {
-        mbId: null,
-        genres: [],
-        tags: [],
-        fetchedAt: new Date().toISOString(),
-      };
+  for (const ch of toProcess) {
+    const entry: GenreCacheEntry = {
+      mbGenres: [],
+      mbTags: [],
+      discogsGenres: [],
+      discogsStyles: [],
+      channelLabels: ch.labels || [],
+      fetchedAt: new Date().toISOString(),
+    };
+
+    // Discogs lookup (faster rate limit: 240/min)
+    if (source === "discogs" || source === "both") {
+      try {
+        const discogs = await discogsSearch(ch.name);
+        if (discogs) {
+          entry.discogsGenres = discogs.genres;
+          entry.discogsStyles = discogs.styles;
+        }
+      } catch (e) {
+        console.error(`Discogs failed for "${ch.name}":`, e);
+      }
     }
 
-    // Rate limit: 1 req/sec (already in searchArtistGenres, but extra safety)
-    await new Promise((r) => setTimeout(r, 500));
+    // MusicBrainz lookup (1 req/sec — slower)
+    if (source === "musicbrainz" || source === "both") {
+      try {
+        const mb = await mbSearch(ch.name);
+        if (mb) {
+          entry.mbGenres = mb.genres;
+          entry.mbTags = mb.tags.map((t) => t.name).slice(0, 10);
+        }
+      } catch (e) {
+        console.error(`MusicBrainz failed for "${ch.name}":`, e);
+      }
+    }
+
+    cache[ch.id] = entry;
+
+    newResults.push({
+      channel: ch.name,
+      discogsStyles: entry.discogsStyles,
+      discogsGenres: entry.discogsGenres,
+      mbGenres: entry.mbGenres,
+      mbTags: entry.mbTags,
+    });
+
+    // Small delay between channels
+    await new Promise((r) => setTimeout(r, 300));
   }
 
   saveCache(cache);
 
   return NextResponse.json({
     processed: newResults.length,
-    remaining: allArtists.length - toProcess.length,
+    remaining: uncached.length - toProcess.length,
     cached: Object.keys(cache).length,
+    totalChannels: approvedChannels.length,
     results: newResults,
   });
 }

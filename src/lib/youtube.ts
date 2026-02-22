@@ -4,7 +4,17 @@ import genreCacheData from "@/data/genre-cache.json";
 import { cacheGet, cacheSet } from "./cache";
 import type { CardData } from "./types";
 
-const genreCache: Record<string, { genres: string[]; tags: string[] }> = genreCacheData;
+interface GenreCacheEntry {
+  mbGenres?: string[];
+  mbTags?: string[];
+  discogsGenres?: string[];
+  discogsStyles?: string[];
+  channelLabels?: string[];
+  // Legacy format support
+  genres?: string[];
+  tags?: string[];
+}
+const genreCache: Record<string, GenreCacheEntry> = genreCacheData;
 
 const API_KEY = process.env.YOUTUBE_API_KEY!;
 const YT_API = "https://www.googleapis.com/youtube/v3";
@@ -221,18 +231,29 @@ function videoThumbnail(videoId: string): string {
 }
 
 function getGenresForArtist(artistName: string, channelName: string): { genres: string[]; channelLabels: string[] } {
-  // 1. Check MusicBrainz cache
-  const mbEntry = genreCache[artistName.toLowerCase()] || genreCache[channelName.toLowerCase()];
-  const mbGenres = mbEntry?.genres || [];
-  const mbTags = mbEntry?.tags?.slice(0, 5) || [];
-
-  // 2. Check channel labels from curator
+  // Find channel to get its ID for cache lookup
   const channel = (approvedChannels as { name: string; id: string; labels?: string[] }[])
     .find((c) => c.name === channelName);
   const channelLabels = channel?.labels || [];
 
-  // Merge: MusicBrainz genres + tags + channel labels (deduplicated)
-  const allGenres = [...new Set([...mbGenres, ...mbTags, ...channelLabels.map(l => l.toLowerCase())])];
+  // Look up genre cache by channel ID (primary) or artist name (fallback)
+  const cacheEntry = (channel ? genreCache[channel.id] : null)
+    || genreCache[artistName.toLowerCase()]
+    || genreCache[channelName.toLowerCase()];
+
+  // Priority: Discogs styles > Discogs genres > MB genres > MB tags > channel labels
+  const discogsStyles = cacheEntry?.discogsStyles || [];
+  const discogsGenres = cacheEntry?.discogsGenres || [];
+  const mbGenres = cacheEntry?.mbGenres || cacheEntry?.genres || [];
+  const mbTags = (cacheEntry?.mbTags || cacheEntry?.tags || []).slice(0, 5);
+
+  const allGenres = [...new Set([
+    ...discogsStyles.map(s => s.toLowerCase()),
+    ...discogsGenres.map(g => g.toLowerCase()),
+    ...mbGenres.map(g => g.toLowerCase()),
+    ...mbTags.map(t => t.toLowerCase()),
+    ...channelLabels.map(l => l.toLowerCase()),
+  ])];
 
   return { genres: allGenres, channelLabels };
 }

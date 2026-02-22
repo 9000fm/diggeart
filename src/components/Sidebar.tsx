@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { useTheme } from "./ThemeProvider";
+import UserMenu from "./UserMenu";
 
 const SEARCH_PHRASES = [
   "detroit techno...",
@@ -263,11 +264,7 @@ export default function Sidebar({
         </div>
 
         <div className="shrink-0">
-          <img
-            src="https://api.dicebear.com/7.x/shapes/svg?seed=digeart"
-            alt="User"
-            className="w-11 h-11 rounded-full bg-[var(--bg-alt)]"
-          />
+          <UserMenu />
         </div>
       </header>
 

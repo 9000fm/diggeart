@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Mono, Rubik_Broken_Fax } from "next/font/google";
 import ThemeProvider from "@/components/ThemeProvider";
+import AuthProvider from "@/components/AuthProvider";
 import "./globals.css";
 
 const spaceMono = Space_Mono({ subsets: ["latin"], weight: ["400", "700"] });
@@ -12,7 +13,7 @@ const rubikBrokenFax = Rubik_Broken_Fax({
 
 export const metadata: Metadata = {
   title: "digeart — music discovery",
-  description: "Music discovery for diggers & curators. Spotify + YouTube.",
+  description: "YouTube music discovery for diggers & curators.",
 };
 
 export default function RootLayout({
@@ -23,7 +24,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${spaceMono.className} ${rubikBrokenFax.variable} antialiased`}>
-        <ThemeProvider>{children}</ThemeProvider>
+        <AuthProvider>
+          <ThemeProvider>{children}</ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );
