@@ -1,45 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import fs from "fs";
-import path from "path";
-
-const DATA_DIR = path.join(process.cwd(), "src/data");
-const CHANNELS_PATH = path.join(DATA_DIR, "music-channels.json");
-const FILTERED_PATH = path.join(DATA_DIR, "filtered-channels.json");
-const REGISTRY_PATH = path.join(DATA_DIR, "channel-registry.json");
-
-interface Channel {
-  name: string;
-  id: string;
-}
-
-interface RegistryEntry {
-  id: string;
-  name: string;
-  importedAt: string;
-  importSource: "subscription" | "paste" | "bookmarks";
-  autoFiltered?: boolean;
-  reviewedAt: string | null;
-  lastScannedAt: string | null;
-  uploadsFetched: number;
-  scanError: string | null;
-}
-
-function readJson(filePath: string) {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf-8"));
-  } catch {
-    return [];
-  }
-}
-
-function readRegistry(): Record<string, RegistryEntry> {
-  try {
-    return JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf-8"));
-  } catch {
-    return {};
-  }
-}
+import { supabase } from "@/lib/supabase";
 
 interface YTSubscriptionItem {
   snippet: {
@@ -53,15 +14,12 @@ interface YTSubscriptionResponse {
   nextPageToken?: string;
 }
 
-export async function GET() {
+export async function POST() {
   const session = await auth();
   const accessToken = (session as unknown as { accessToken?: string })?.accessToken;
 
   if (!session || !accessToken) {
-    return NextResponse.json(
-      { error: "Not authenticated or missing YouTube access" },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   // Fetch all YouTube subscriptions (paginated)
@@ -80,12 +38,7 @@ export async function GET() {
     });
 
     if (!res.ok) {
-      const err = await res.text();
-      console.error("YouTube subscriptions API error:", err);
-      return NextResponse.json(
-        { error: "Failed to fetch YouTube subscriptions" },
-        { status: res.status }
-      );
+      return NextResponse.json({ error: "Failed to fetch subscriptions" }, { status: res.status });
     }
 
     const data: YTSubscriptionResponse = await res.json();
@@ -98,113 +51,29 @@ export async function GET() {
     pageToken = data.nextPageToken;
   } while (pageToken);
 
-  // Compare against existing channels
-  const existingChannels: Channel[] = readJson(CHANNELS_PATH);
-  const existingIds = new Set(existingChannels.map((c) => c.id));
-  const newChannels = allSubs.filter((c) => !existingIds.has(c.id));
+  // Get all existing channel IDs from Supabase
+  const { data: existing } = await supabase
+    .from("curator_channels")
+    .select("channel_id, status");
 
-  return NextResponse.json({
-    newChannels,
-    totalSubscriptions: allSubs.length,
-  });
-}
-
-export async function POST() {
-  const session = await auth();
-  const accessToken = (session as unknown as { accessToken?: string })?.accessToken;
-
-  if (!session || !accessToken) {
-    return NextResponse.json(
-      { error: "Not authenticated" },
-      { status: 401 }
-    );
+  const existingMap = new Map<string, string>();
+  for (const ch of existing || []) {
+    existingMap.set(ch.channel_id, ch.status);
   }
 
-  // Re-fetch subscriptions and import new ones
-  const allSubs: { name: string; id: string }[] = [];
-  let pageToken: string | undefined;
+  // Find brand new channels (not in DB at all)
+  const brandNew = allSubs.filter((c) => !existingMap.has(c.id));
 
-  do {
-    const url = new URL("https://www.googleapis.com/youtube/v3/subscriptions");
-    url.searchParams.set("part", "snippet");
-    url.searchParams.set("mine", "true");
-    url.searchParams.set("maxResults", "50");
-    if (pageToken) url.searchParams.set("pageToken", pageToken);
-
-    const res = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-
-    if (!res.ok) break;
-
-    const data: YTSubscriptionResponse = await res.json();
-    for (const item of data.items || []) {
-      allSubs.push({
-        name: item.snippet.title,
-        id: item.snippet.resourceId.channelId,
-      });
-    }
-    pageToken = data.nextPageToken;
-  } while (pageToken);
-
-  const APPROVED_PATH = path.join(DATA_DIR, "approved-channels.json");
-  const REJECTED_PATH = path.join(DATA_DIR, "rejected-channels.json");
-
-  const existingChannels: Channel[] = readJson(CHANNELS_PATH);
-  const existingIds = new Set(existingChannels.map((c) => c.id));
-  const approved: Channel[] = readJson(APPROVED_PATH);
-  const approvedIds = new Set(approved.map((c) => c.id));
-  const rejected: Channel[] = readJson(REJECTED_PATH);
-  const rejectedIds = new Set(rejected.map((c) => c.id));
-  const existingFiltered: { name: string; id: string; topics: string[] }[] = readJson(FILTERED_PATH);
-  const filteredIds = new Set(existingFiltered.map((c) => c.id));
-
-  // Channels not in any list yet
-  const brandNew = allSubs.filter((c) =>
-    !existingIds.has(c.id) && !approvedIds.has(c.id) && !rejectedIds.has(c.id) && !filteredIds.has(c.id)
-  );
-
-  // Re-subscribed channels: in rejected but user subscribed again → move back to New
-  const reSubscribed = allSubs.filter((c) => rejectedIds.has(c.id));
-  if (reSubscribed.length > 0) {
-    const updatedRejected = rejected.filter((c) => !allSubs.some((s) => s.id === c.id));
-    fs.writeFileSync(REJECTED_PATH, JSON.stringify(updatedRejected, null, 2));
-    // Add re-subscribed to music-channels so they appear in New
-    for (const ch of reSubscribed) {
-      if (!existingIds.has(ch.id)) {
-        existingChannels.push(ch);
-        existingIds.add(ch.id);
-      }
-    }
-    fs.writeFileSync(CHANNELS_PATH, JSON.stringify(existingChannels, null, 2));
+  if (brandNew.length === 0) {
+    return NextResponse.json({ added: 0, filtered: 0 });
   }
 
-  // Also rescue any re-subscribed channels from filtered
-  const reSubFiltered = allSubs.filter((c) => filteredIds.has(c.id));
-  if (reSubFiltered.length > 0) {
-    const updatedFiltered = existingFiltered.filter((c) => !allSubs.some((s) => s.id === c.id));
-    fs.writeFileSync(FILTERED_PATH, JSON.stringify(updatedFiltered, null, 2));
-    for (const ch of reSubFiltered) {
-      if (!existingIds.has(ch.id)) {
-        existingChannels.push(ch);
-        existingIds.add(ch.id);
-      }
-    }
-    fs.writeFileSync(CHANNELS_PATH, JSON.stringify(existingChannels, null, 2));
-  }
-
-  const newChannels = brandNew;
-
-  if (newChannels.length === 0 && reSubscribed.length === 0 && reSubFiltered.length === 0) {
-    return NextResponse.json({ added: 0, filtered: 0, rescued: reSubscribed.length + reSubFiltered.length });
-  }
-
-  // Batch-fetch topicDetails for new channels (up to 50 per request)
+  // Batch-fetch topicDetails for new channels
   const musicChannels: { name: string; id: string }[] = [];
-  const filteredOut: { name: string; id: string; topics: string[] }[] = [];
+  const filteredOut: { name: string; id: string; topics: string }[] = [];
 
-  for (let i = 0; i < newChannels.length; i += 50) {
-    const batch = newChannels.slice(i, i + 50);
+  for (let i = 0; i < brandNew.length; i += 50) {
+    const batch = brandNew.slice(i, i + 50);
     const ids = batch.map((c) => c.id).join(",");
 
     try {
@@ -235,75 +104,48 @@ export async function POST() {
               t.toLowerCase().includes("entertainment")
           );
           if (isMusic || topics.length === 0) {
-            // Music candidate or no topic data — goes to review queue
             musicChannels.push(ch);
           } else {
-            filteredOut.push({ ...ch, topics });
+            filteredOut.push({ ...ch, topics: topics.join(", ") });
           }
         }
       } else {
-        // API failed — treat all as music candidates (safe fallback)
         musicChannels.push(...batch);
       }
     } catch {
-      // On error, treat all as music candidates
       musicChannels.push(...batch);
     }
   }
 
-  const registry = readRegistry();
   const now = new Date().toISOString();
 
-  // Add music channels to music-channels.json
+  // Insert music channels as pending
   if (musicChannels.length > 0) {
-    const updated = [...existingChannels, ...musicChannels];
-    fs.writeFileSync(CHANNELS_PATH, JSON.stringify(updated, null, 2));
+    const rows = musicChannels.map((ch) => ({
+      channel_id: ch.id,
+      name: ch.name,
+      status: "pending",
+      import_source: "subscription",
+      imported_at: now,
+    }));
+    await supabase.from("curator_channels").insert(rows);
   }
 
-  // Add filtered channels to filtered-channels.json
+  // Insert filtered channels
   if (filteredOut.length > 0) {
-    let existing: { name: string; id: string; topics: string[] }[] = [];
-    try {
-      existing = JSON.parse(fs.readFileSync(FILTERED_PATH, "utf-8"));
-    } catch {
-      existing = [];
-    }
-    const existingFilteredIds = new Set(existing.map((c) => c.id));
-    const newFiltered = filteredOut.filter((c) => !existingFilteredIds.has(c.id));
-    fs.writeFileSync(FILTERED_PATH, JSON.stringify([...existing, ...newFiltered], null, 2));
+    const rows = filteredOut.map((ch) => ({
+      channel_id: ch.id,
+      name: ch.name,
+      status: "filtered",
+      notes: ch.topics,
+      import_source: "subscription",
+      imported_at: now,
+    }));
+    await supabase.from("curator_channels").insert(rows);
   }
 
-  // Update registry for all channels
-  for (const ch of musicChannels) {
-    if (!registry[ch.id]) {
-      registry[ch.id] = {
-        id: ch.id,
-        name: ch.name,
-        importedAt: now,
-        importSource: "subscription",
-        reviewedAt: null,
-        lastScannedAt: null,
-        uploadsFetched: 0,
-        scanError: null,
-      };
-    }
-  }
-  for (const ch of filteredOut) {
-    if (!registry[ch.id]) {
-      registry[ch.id] = {
-        id: ch.id,
-        name: ch.name,
-        importedAt: now,
-        importSource: "subscription",
-        autoFiltered: true,
-        reviewedAt: null,
-        lastScannedAt: null,
-        uploadsFetched: 0,
-        scanError: null,
-      };
-    }
-  }
-  fs.writeFileSync(REGISTRY_PATH, JSON.stringify(registry, null, 2));
-
-  return NextResponse.json({ added: musicChannels.length, filtered: filteredOut.length });
+  return NextResponse.json({
+    added: musicChannels.length,
+    filtered: filteredOut.length,
+  });
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSession } from "next-auth/react";
 import type { CuratorTab, ApprovedChannel, ApprovedView } from "./types";
 import { useCuratorData } from "./hooks/useCuratorData";
 import { useCuratorActions } from "./hooks/useCuratorActions";
@@ -22,7 +23,38 @@ interface ReviewChannel {
   importedAt?: string | null;
 }
 
+function CuratorAuthGate() {
+  const { data: session, status } = useSession();
+
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] font-mono flex items-center justify-center">
+        <span className="animate-pulse text-[var(--text-muted)]">LOADING...</span>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] font-mono flex flex-col items-center justify-center gap-6">
+        <h1 className="text-3xl font-bold uppercase tracking-[0.25em] text-[var(--text-secondary)]">CURATOR</h1>
+        <p className="text-[var(--text-muted)] text-sm">Sign in to access the curator dashboard</p>
+        <AuthButton />
+        <a href="/" className="text-[var(--text-muted)] hover:text-[var(--text)] text-xs uppercase tracking-wider transition-colors mt-4">
+          &larr; Back to digeart
+        </a>
+      </div>
+    );
+  }
+
+  return <CuratorDashboard />;
+}
+
 export default function CuratorPage() {
+  return <CuratorAuthGate />;
+}
+
+function CuratorDashboard() {
   const [activeTab, setActiveTab] = useState<CuratorTab>("review");
   const [selectedLabels, setSelectedLabels] = useState<Set<string>>(new Set());
   const [channelNotes, setChannelNotes] = useState("");
@@ -128,11 +160,9 @@ export default function CuratorPage() {
     setRejectedReviewChannel(null);
   }, [activeTab]);
 
-  // Reset labels when channel changes
+  // Reset playing video when channel changes
   useEffect(() => {
-    setSelectedLabels(new Set());
     setPlayingVideoId(null);
-    setChannelNotes("");
   }, [data?.channel?.id]);
 
   const toggleLabel = useCallback((label: string) => {
@@ -439,12 +469,15 @@ export default function CuratorPage() {
       <div className="max-w-7xl mx-auto px-4 py-3 lg:px-8 lg:py-3">
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-5">
-            <a href="/" className="text-3xl font-bold uppercase tracking-[0.25em] text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors">
-              CURATOR
+          <h1 className="text-3xl font-bold uppercase tracking-[0.25em] text-[var(--text-secondary)]">
+            CURATOR
+          </h1>
+          <div className="flex items-center gap-4">
+            <a href="/" className="text-xs text-[var(--text-muted)] hover:text-[var(--text)] uppercase tracking-[0.15em] transition-colors border border-[var(--border)] hover:border-[var(--text-muted)] rounded-lg px-4 py-2 font-bold">
+              &larr; BACK TO DIGEART
             </a>
+            <AuthButton />
           </div>
-          <AuthButton />
         </div>
 
         <CuratorStatsBar stats={stats} />

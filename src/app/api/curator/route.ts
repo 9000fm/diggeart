@@ -1,91 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 import { getChannelUploads } from "@/lib/youtube";
 import { auth } from "@/auth";
-
-const DATA_DIR = path.join(process.cwd(), "src/data");
-const CHANNELS_PATH = path.join(DATA_DIR, "music-channels.json");
-const APPROVED_PATH = path.join(DATA_DIR, "approved-channels.json");
-const REJECTED_PATH = path.join(DATA_DIR, "rejected-channels.json");
-const UNSUB_PATH = path.join(DATA_DIR, "unsubscribe-channels.json");
-const STARRED_PATH = path.join(DATA_DIR, "starred-channels.json");
-const SKIPPED_PATH = path.join(DATA_DIR, "skipped-channels.json");
-const FILTERED_PATH = path.join(DATA_DIR, "filtered-channels.json");
-const REGISTRY_PATH = path.join(DATA_DIR, "channel-registry.json");
-
-interface Channel {
-  name: string;
-  id: string;
-}
-
-interface ApprovedChannel extends Channel {
-  labels?: string[];
-  notes?: string;
-}
-
-interface RejectedChannel {
-  name: string;
-  id: string;
-}
-
-interface RegistryEntry {
-  id: string;
-  name: string;
-  importedAt: string;
-  importSource: "subscription" | "paste" | "bookmarks";
-  autoFiltered?: boolean;
-  reviewedAt: string | null;
-  lastScannedAt: string | null;
-  uploadsFetched: number;
-  scanError: string | null;
-}
-
-function readJson(filePath: string) {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf-8"));
-  } catch {
-    return [];
-  }
-}
-
-function readRegistry(): Record<string, RegistryEntry> {
-  try {
-    return JSON.parse(fs.readFileSync(REGISTRY_PATH, "utf-8"));
-  } catch {
-    return {};
-  }
-}
-
-function writeJson(filePath: string, data: unknown) {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-}
-
-function updateRegistry(
-  channelId: string,
-  updates: Partial<RegistryEntry>
-) {
-  const registry = readRegistry();
-  if (registry[channelId]) {
-    Object.assign(registry[channelId], updates);
-    writeJson(REGISTRY_PATH, registry);
-  }
-}
+import { supabase } from "@/lib/supabase";
 
 function pickUploads(allUploads: Awaited<ReturnType<typeof getChannelUploads>>) {
   const sorted = [...allUploads].sort(
     (a, b) => (b.viewCount || 0) - (a.viewCount || 0)
   );
-  const top3 = sorted.slice(0, 3).map((v) => ({
-    ...v,
-    isTopViewed: true as const,
-  }));
+  const top3 = sorted.slice(0, 3).map((v) => ({ ...v, isTopViewed: true as const }));
   const rest = sorted.slice(3);
   const shuffled = [...rest].sort(() => Math.random() - 0.5);
-  const random6 = shuffled.slice(0, 6).map((v) => ({
-    ...v,
-    isTopViewed: false as const,
-  }));
+  const random6 = shuffled.slice(0, 6).map((v) => ({ ...v, isTopViewed: false as const }));
   return [...top3, ...random6];
 }
 
@@ -94,287 +19,164 @@ export async function GET(req: NextRequest) {
   const rescan = req.nextUrl.searchParams.get("rescan");
   const rescanChannelId = req.nextUrl.searchParams.get("channelId");
 
-  const allChannels: Channel[] = readJson(CHANNELS_PATH);
-  const approved: ApprovedChannel[] = readJson(APPROVED_PATH);
-  const rejected: RejectedChannel[] = readJson(REJECTED_PATH);
-  const unsub: Channel[] = readJson(UNSUB_PATH);
-  const starred: Channel[] = readJson(STARRED_PATH);
-  const skipped: string[] = readJson(SKIPPED_PATH);
-
-  // Set-based dedup for accurate counts
-  const approvedIds = new Set(approved.map((c) => c.id));
-  const rejectedIds = new Set(rejected.map((c) => c.id));
-  const unsubIds = new Set(unsub.map((c) => c.id));
-  const decidedIds = new Set([
-    ...approved.map((c) => c.id),
-    ...rejected.map((c) => c.id),
-    ...unsub.map((c) => c.id),
-  ]);
-  const skippedIds = new Set(skipped);
-  const starredIds = new Set(starred.map((c) => c.id));
-
-  // Return stats for the stats bar
+  // Stats
   if (mode === "stats") {
-    const noLabels = approved.filter(
-      (c) => !c.labels || c.labels.length === 0
-    ).length;
-    // Detect conflicts: channels in both approved AND rejected
-    const conflicts = approved.filter((c) => rejectedIds.has(c.id));
+    const { count: total } = await supabase.from("curator_channels").select("*", { count: "exact", head: true });
+    const { count: approved } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "approved");
+    const { count: rejected } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "rejected");
+    const { count: pending } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "pending");
+    const { count: filtered } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "filtered");
+    const { count: starred } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("starred", true);
 
     return NextResponse.json({
-      imported: allChannels.length,
-      approved: approved.length,
-      skipped: skipped.length,
-      rejected: rejected.length,
-      unsub: unsub.length,
-      starred: starred.length,
-      pending: allChannels.length - decidedIds.size,
-      conflicts: conflicts.length,
-      unreviewed: allChannels.length - decidedIds.size,
-      noLabels,
+      imported: total || 0,
+      approved: approved || 0,
+      rejected: rejected || 0,
+      starred: starred || 0,
+      pending: (pending || 0) + (filtered || 0),
     });
   }
 
-  // Coverage: full status breakdown with channel lists per segment
-  if (mode === "coverage") {
-    const registry = readRegistry();
-
-    const approvedList = approved.map((c) => ({
-      ...c,
-      isStarred: starredIds.has(c.id),
-    }));
-
-    const rejectedList = rejected.filter((c) => !unsubIds.has(c.id));
-    const unsubList = unsub;
-
-    const unreviewedList = allChannels.filter((c) => !decidedIds.has(c.id));
-    const skippedList = allChannels.filter(
-      (c) => skippedIds.has(c.id) && !decidedIds.has(c.id)
-    );
-
-    // Conflicts: in both approved AND rejected
-    const conflictList = approved.filter((c) => rejectedIds.has(c.id));
-
-    return NextResponse.json({
-      total: allChannels.length,
-      segments: {
-        approved: { count: approved.length, channels: approvedList },
-        rejected: {
-          count: rejectedList.length,
-          channels: rejectedList,
-        },
-        unsub: { count: unsub.length, channels: unsubList },
-        skipped: { count: skippedList.length, channels: skippedList },
-        unreviewed: {
-          count: unreviewedList.length,
-          channels: unreviewedList,
-        },
-        conflict: { count: conflictList.length, channels: conflictList },
-      },
-    });
-  }
-
-  // Health: conflicts, scan errors, never-scanned, no-labels
-  if (mode === "health") {
-    const registry = readRegistry();
-
-    const conflicts = approved
-      .filter((c) => rejectedIds.has(c.id))
-      .map((c) => ({ ...c, issue: "In both approved & rejected" }));
-
-    const noLabels = approved.filter(
-      (c) => !c.labels || c.labels.length === 0
-    );
-
-    const scanErrors: (RegistryEntry & { issue: string })[] = [];
-    const neverScanned: RegistryEntry[] = [];
-
-    for (const entry of Object.values(registry)) {
-      if (entry.scanError) {
-        scanErrors.push({ ...entry, issue: entry.scanError });
-      }
-      if (!entry.lastScannedAt && approvedIds.has(entry.id)) {
-        neverScanned.push(entry);
-      }
-    }
-
-    return NextResponse.json({
-      conflicts,
-      noLabels: noLabels.length,
-      noLabelsList: noLabels,
-      scanErrors: scanErrors.length,
-      scanErrorsList: scanErrors,
-      neverScanned: neverScanned.length,
-      neverScannedList: neverScanned,
-    });
-  }
-
-  // Check for new subscriptions without importing
+  // Check subs
   if (mode === "check-subs") {
-    let newCount = 0;
-    let error: string | undefined;
-    try {
-      const session = await auth();
-      const accessToken = (session as unknown as { accessToken?: string })?.accessToken;
-      if (accessToken) {
-        const existingIds = new Set(allChannels.map((c) => c.id));
-        let subPageToken: string | undefined;
-
-        do {
-          const url = new URL("https://www.googleapis.com/youtube/v3/subscriptions");
-          url.searchParams.set("part", "snippet");
-          url.searchParams.set("mine", "true");
-          url.searchParams.set("maxResults", "50");
-          if (subPageToken) url.searchParams.set("pageToken", subPageToken);
-
-          const res = await fetch(url.toString(), {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-
-          if (!res.ok) {
-            error = "Failed to fetch subscriptions";
-            break;
-          }
-
-          const data = await res.json();
-          for (const item of data.items || []) {
-            const chId = item.snippet?.resourceId?.channelId;
-            if (chId && !existingIds.has(chId)) {
-              newCount++;
-            }
-          }
-          subPageToken = data.nextPageToken;
-        } while (subPageToken);
-      } else {
-        error = "Not authenticated";
-      }
-    } catch (e) {
-      error = e instanceof Error ? e.message : "Unknown error";
+    const session = await auth();
+    const accessToken = (session as unknown as { accessToken?: string })?.accessToken;
+    if (!session || !accessToken) {
+      return NextResponse.json({ newCount: 0, error: "Not authenticated" });
     }
-    return NextResponse.json({ newCount, error });
+
+    try {
+      const url = new URL("https://www.googleapis.com/youtube/v3/subscriptions");
+      url.searchParams.set("part", "snippet");
+      url.searchParams.set("mine", "true");
+      url.searchParams.set("maxResults", "50");
+      const res = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) return NextResponse.json({ newCount: 0, error: "API error" });
+
+      const data = await res.json();
+      const subIds = (data.items || []).map((i: { snippet: { resourceId: { channelId: string } } }) => i.snippet.resourceId.channelId);
+
+      const { data: existing } = await supabase.from("curator_channels").select("channel_id");
+      const existingIds = new Set((existing || []).map((c: { channel_id: string }) => c.channel_id));
+      const newCount = subIds.filter((id: string) => !existingIds.has(id)).length;
+
+      return NextResponse.json({ newCount });
+    } catch {
+      return NextResponse.json({ newCount: 0, error: "Check failed" });
+    }
   }
 
-  // Return auto-filtered channels
+  // Filtered channels
   if (mode === "filtered") {
-    const registry = readRegistry();
-    const filtered: { name: string; id: string; topics: string[] }[] = readJson(FILTERED_PATH);
-    const enriched = filtered.map((c) => ({
-      ...c,
-      importedAt: registry[c.id]?.importedAt || null,
-    }));
-    enriched.sort((a, b) => {
-      if (!a.importedAt && !b.importedAt) return 0;
-      if (!a.importedAt) return 1;
-      if (!b.importedAt) return -1;
-      return new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime();
+    const { data: channels } = await supabase
+      .from("curator_channels")
+      .select("channel_id, name, notes, imported_at")
+      .eq("status", "filtered")
+      .order("imported_at", { ascending: false });
+
+    return NextResponse.json({
+      channels: (channels || []).map((c) => ({
+        name: c.name,
+        id: c.channel_id,
+        topics: c.notes ? [c.notes] : [],
+        importedAt: c.imported_at,
+      })),
     });
-    return NextResponse.json({ channels: enriched });
   }
 
-  // Return rejected channels enriched with dates, sorted newest-first
+  // Rejected channels
   if (mode === "rejected") {
-    const registry = readRegistry();
-    const enriched = rejected.map((c) => ({
-      ...c,
-      reviewedAt: registry[c.id]?.reviewedAt || null,
-      importedAt: registry[c.id]?.importedAt || null,
-    }));
-    enriched.sort((a, b) => {
-      if (!a.reviewedAt && !b.reviewedAt) return 0;
-      if (!a.reviewedAt) return 1;
-      if (!b.reviewedAt) return -1;
-      return new Date(b.reviewedAt).getTime() - new Date(a.reviewedAt).getTime();
+    const { data: channels } = await supabase
+      .from("curator_channels")
+      .select("channel_id, name, reviewed_at, imported_at")
+      .eq("status", "rejected")
+      .order("name");
+
+    return NextResponse.json({
+      channels: (channels || []).map((c) => ({
+        name: c.name,
+        id: c.channel_id,
+        reviewedAt: c.reviewed_at,
+        importedAt: c.imported_at,
+      })),
     });
-    return NextResponse.json({ channels: enriched });
   }
 
-  // Return full approved list for the Approved Browser
+  // Approved channels
   if (mode === "approved") {
-    const registry = readRegistry();
+    const { data: channels } = await supabase
+      .from("curator_channels")
+      .select("channel_id, name, labels, starred, reviewed_at, notes")
+      .eq("status", "approved")
+      .order("name");
+
     return NextResponse.json({
-      channels: approved.map((c) => ({
-        ...c,
-        isStarred: starredIds.has(c.id),
-        reviewedAt: registry[c.id]?.reviewedAt || null,
+      channels: (channels || []).map((c) => ({
+        name: c.name,
+        id: c.channel_id,
+        labels: c.labels || [],
+        isStarred: c.starred,
+        reviewedAt: c.reviewed_at,
+        notes: c.notes,
       })),
     });
   }
 
-  // Return skipped channels with names for Manage tab
-  if (mode === "skipped") {
-    const skippedChannels = allChannels.filter((c) => skipped.includes(c.id));
-    return NextResponse.json({ channels: skippedChannels });
-  }
-
-  // Return untagged approved channels for Manage tab
-  if (mode === "untagged") {
-    const untagged = approved.filter(
-      (c) => !c.labels || c.labels.length === 0
-    );
-    return NextResponse.json({ channels: untagged });
-  }
-
-  // Return all pending (unreviewed) channels for the NEW tab
+  // Pending channels (for Review tab)
   if (mode === "pending") {
-    const registry = readRegistry();
-    const pending = allChannels.filter(
-      (c) => !approvedIds.has(c.id) && !rejectedIds.has(c.id) && !unsubIds.has(c.id)
-    );
+    const { data: channels } = await supabase
+      .from("curator_channels")
+      .select("channel_id, name, imported_at")
+      .eq("status", "pending")
+      .order("imported_at", { ascending: false });
+
     return NextResponse.json({
-      channels: pending.map((c) => ({
-        ...c,
-        importedAt: registry[c.id]?.importedAt || null,
+      channels: (channels || []).map((c) => ({
+        name: c.name,
+        id: c.channel_id,
+        importedAt: c.imported_at,
       })),
     });
   }
 
-  const unreviewed = allChannels.filter(
-    (c) =>
-      !approvedIds.has(c.id) &&
-      !rejectedIds.has(c.id) &&
-      !unsubIds.has(c.id)
-  );
-
-  // Filter out skipped channels to find the next one to show
-  const available = unreviewed.filter((c) => !skippedIds.has(c.id));
-
-  const reviewed = decidedIds.size;
-  const total = allChannels.length;
-
-  // Rescan: re-fetch a specific channel's uploads bypassing cache
+  // Rescan: fetch uploads + topics for a specific channel
   if (rescan === "true" && rescanChannelId) {
-    const channel = allChannels.find((c) => c.id === rescanChannelId);
-    if (!channel) {
-      return NextResponse.json(
-        { error: "Channel not found" },
-        { status: 404 }
-      );
+    const { data: chData } = await supabase
+      .from("curator_channels")
+      .select("channel_id, name, starred")
+      .eq("channel_id", rescanChannelId)
+      .single();
+
+    if (!chData) {
+      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
     }
 
     let allUploads: Awaited<ReturnType<typeof getChannelUploads>> = [];
-    let scanError: string | null = null;
     try {
-      allUploads = await getChannelUploads(channel.id, 50, true, true);
+      allUploads = await getChannelUploads(rescanChannelId, 50, true, true);
     } catch (e) {
-      console.error("Failed to rescan uploads for", channel.name, e);
-      scanError = e instanceof Error ? e.message : "Unknown error";
+      console.error("Failed to rescan uploads for", chData.name, e);
     }
 
-    // Update registry with scan result
-    updateRegistry(channel.id, {
-      lastScannedAt: new Date().toISOString(),
-      uploadsFetched: allUploads.length,
-      scanError,
-    });
+    // Update scan info
+    await supabase
+      .from("curator_channels")
+      .update({
+        last_scanned_at: new Date().toISOString(),
+        uploads_fetched: allUploads.length,
+      })
+      .eq("channel_id", rescanChannelId);
 
     const uploads = pickUploads(allUploads);
 
-    // Fetch YouTube topic categories for this channel
+    // Fetch YouTube topic categories
     let topics: string[] = [];
     try {
       const topicUrl = new URL("https://www.googleapis.com/youtube/v3/channels");
       topicUrl.searchParams.set("part", "topicDetails");
-      topicUrl.searchParams.set("id", channel.id);
+      topicUrl.searchParams.set("id", rescanChannelId);
       topicUrl.searchParams.set("key", process.env.YOUTUBE_API_KEY || "");
       const topicRes = await fetch(topicUrl.toString());
       if (topicRes.ok) {
@@ -387,453 +189,179 @@ export async function GET(req: NextRequest) {
           });
         }
       }
-    } catch { /* ignore topic fetch errors */ }
+    } catch { /* ignore */ }
+
+    const { count: pendingCount } = await supabase
+      .from("curator_channels")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "pending");
 
     return NextResponse.json({
-      channel,
+      channel: { name: chData.name, id: chData.channel_id },
       uploads,
       topics,
-      reviewed,
-      total,
-      remaining: unreviewed.length,
-      approvedCount: approved.length,
-      starredCount: starred.length,
-      isStarred: starredIds.has(channel.id),
+      reviewed: 0,
+      total: pendingCount || 0,
+      isStarred: chData.starred,
     });
   }
 
-  if (available.length === 0) {
-    // Check for unimported YouTube subscriptions
-    let hasNewSubscriptions = false;
-    let newSubCount = 0;
-    try {
-      const session = await auth();
-      const accessToken = (session as unknown as { accessToken?: string })?.accessToken;
-      if (accessToken) {
-        const existingIds = new Set(allChannels.map((c) => c.id));
-        let pageToken: string | undefined;
-        const newSubs: string[] = [];
+  // Default: next unreviewed channel
+  const { data: nextChannel } = await supabase
+    .from("curator_channels")
+    .select("channel_id, name, starred")
+    .eq("status", "pending")
+    .order("imported_at")
+    .limit(1)
+    .single();
 
-        do {
-          const url = new URL("https://www.googleapis.com/youtube/v3/subscriptions");
-          url.searchParams.set("part", "snippet");
-          url.searchParams.set("mine", "true");
-          url.searchParams.set("maxResults", "50");
-          if (pageToken) url.searchParams.set("pageToken", pageToken);
-
-          const res = await fetch(url.toString(), {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
-
-          if (!res.ok) break;
-
-          const data = await res.json();
-          for (const item of data.items || []) {
-            const chId = item.snippet?.resourceId?.channelId;
-            if (chId && !existingIds.has(chId)) {
-              newSubs.push(chId);
-            }
-          }
-          pageToken = data.nextPageToken;
-        } while (pageToken);
-
-        if (newSubs.length > 0) {
-          hasNewSubscriptions = true;
-          newSubCount = newSubs.length;
-        }
-      }
-    } catch (e) {
-      console.error("Failed to check subscriptions:", e);
-    }
-
-    return NextResponse.json({
-      done: true,
-      reviewed,
-      total,
-      approvedCount: approved.length,
-      unsubCount: unsub.length,
-      starredCount: starred.length,
-      skippedCount: skipped.length,
-      starredChannels: starred,
-      approvedChannels: approved,
-      rejectedCount: rejected.length,
-      unsubChannels: unsub,
-      hasNewSubscriptions,
-      newSubCount,
-    });
+  if (!nextChannel) {
+    const { count: total } = await supabase.from("curator_channels").select("*", { count: "exact", head: true });
+    const { count: approved } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "approved");
+    return NextResponse.json({ done: true, reviewed: total || 0, total: total || 0, approvedCount: approved || 0 });
   }
-
-  const channel = available[0];
 
   let allUploads: Awaited<ReturnType<typeof getChannelUploads>> = [];
-  let scanError: string | null = null;
   try {
-    allUploads = await getChannelUploads(channel.id, 50, true);
-  } catch (e) {
-    console.error("Failed to fetch uploads for", channel.name, e);
-    scanError = e instanceof Error ? e.message : "Unknown error";
-  }
+    allUploads = await getChannelUploads(nextChannel.channel_id, 50, true, true);
+  } catch { /* ignore */ }
 
-  // Update registry with scan result
-  updateRegistry(channel.id, {
-    lastScannedAt: new Date().toISOString(),
-    uploadsFetched: allUploads.length,
-    scanError,
-  });
+  await supabase
+    .from("curator_channels")
+    .update({ last_scanned_at: new Date().toISOString(), uploads_fetched: allUploads.length })
+    .eq("channel_id", nextChannel.channel_id);
 
-  const uploads = pickUploads(allUploads);
+  const { count: total } = await supabase.from("curator_channels").select("*", { count: "exact", head: true });
+  const { count: approved } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "approved");
+  const { count: pending } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "pending");
 
   return NextResponse.json({
-    channel,
-    uploads,
-    reviewed,
-    total,
-    remaining: unreviewed.length,
-    approvedCount: approved.length,
-    unsubCount: unsub.length,
-    starredCount: starred.length,
-    isStarred: starredIds.has(channel.id),
+    channel: { name: nextChannel.name, id: nextChannel.channel_id },
+    uploads: pickUploads(allUploads),
+    reviewed: (total || 0) - (pending || 0),
+    total: total || 0,
+    remaining: pending || 0,
+    approvedCount: approved || 0,
+    isStarred: nextChannel.starred,
   });
 }
 
+// POST: Record a decision (approve/reject)
 export async function POST(req: NextRequest) {
   const { channelId, channelName, decision, labels, notes } = await req.json();
   const now = new Date().toISOString();
 
   if (decision === "approve") {
-    const approved: ApprovedChannel[] = readJson(APPROVED_PATH);
-    if (!approved.some((c) => c.id === channelId)) {
-      const entry: ApprovedChannel = { name: channelName, id: channelId };
-      if (labels && labels.length > 0) entry.labels = labels;
-      if (notes) entry.notes = notes;
-      approved.push(entry);
-      writeJson(APPROVED_PATH, approved);
-    }
+    await supabase
+      .from("curator_channels")
+      .update({
+        status: "approved",
+        labels: labels || [],
+        notes: notes || null,
+        reviewed_at: now,
+      })
+      .eq("channel_id", channelId);
   } else if (decision === "reject") {
-    const rejected: RejectedChannel[] = readJson(REJECTED_PATH);
-    if (!rejected.some((c) => c.id === channelId)) {
-      rejected.push({ name: channelName, id: channelId });
-      writeJson(REJECTED_PATH, rejected);
-    }
-  } else if (decision === "unsubscribe") {
-    const rejected: RejectedChannel[] = readJson(REJECTED_PATH);
-    if (!rejected.some((c) => c.id === channelId)) {
-      rejected.push({ name: channelName, id: channelId });
-      writeJson(REJECTED_PATH, rejected);
-    }
-    const unsub: Channel[] = readJson(UNSUB_PATH);
-    if (!unsub.some((c) => c.id === channelId)) {
-      unsub.push({ name: channelName, id: channelId });
-      writeJson(UNSUB_PATH, unsub);
-    }
-  }
-
-  // Write reviewedAt + notes to registry
-  const regUpdates: Record<string, unknown> = { reviewedAt: now };
-  if (notes) regUpdates.notes = notes;
-  updateRegistry(channelId, regUpdates as Partial<RegistryEntry>);
-
-  // Also remove from skipped if it was skipped before
-  const skipped: string[] = readJson(SKIPPED_PATH);
-  const skipIdx = skipped.indexOf(channelId);
-  if (skipIdx !== -1) {
-    skipped.splice(skipIdx, 1);
-    writeJson(SKIPPED_PATH, skipped);
+    await supabase
+      .from("curator_channels")
+      .update({
+        status: "rejected",
+        reviewed_at: now,
+        notes: notes || null,
+      })
+      .eq("channel_id", channelId);
   }
 
   return NextResponse.json({ ok: true });
 }
 
+// PUT: Various actions
 export async function PUT(req: NextRequest) {
   const body = await req.json();
 
-  if (body.clear === true) {
-    writeJson(SKIPPED_PATH, []);
-    return NextResponse.json({ ok: true, cleared: true });
-  }
-
-  // Un-skip a single channel (move back to review queue)
-  if (body.action === "unskip" && body.channelId) {
-    const skipped: string[] = readJson(SKIPPED_PATH);
-    const idx = skipped.indexOf(body.channelId);
-    if (idx !== -1) {
-      skipped.splice(idx, 1);
-      writeJson(SKIPPED_PATH, skipped);
-    }
-    return NextResponse.json({ ok: true, skippedCount: skipped.length });
-  }
-
-  // Resolve conflict: remove from one list
-  if (body.action === "resolveConflict" && body.channelId && body.keep) {
-    if (body.keep === "approved") {
-      const rejected: RejectedChannel[] = readJson(REJECTED_PATH);
-      const filtered = rejected.filter((c) => c.id !== body.channelId);
-      writeJson(REJECTED_PATH, filtered);
-    } else if (body.keep === "rejected") {
-      const approved: ApprovedChannel[] = readJson(APPROVED_PATH);
-      const filtered = approved.filter((c) => c.id !== body.channelId);
-      writeJson(APPROVED_PATH, filtered);
-      // Also remove from starred
-      const starred: Channel[] = readJson(STARRED_PATH);
-      const filtered2 = starred.filter((c) => c.id !== body.channelId);
-      writeJson(STARRED_PATH, filtered2);
-    }
-    return NextResponse.json({ ok: true });
-  }
-
-  // Change decision on an approved channel (reject or unsubscribe)
-  if (
-    body.action === "changeDecision" &&
-    body.channelId &&
-    body.newDecision
-  ) {
-    const approved: ApprovedChannel[] = readJson(APPROVED_PATH);
-    const approvedIdx = approved.findIndex((c) => c.id === body.channelId);
-    if (approvedIdx !== -1) {
-      approved.splice(approvedIdx, 1);
-      writeJson(APPROVED_PATH, approved);
-    }
-
-    const starred: Channel[] = readJson(STARRED_PATH);
-    const starIdx = starred.findIndex((c) => c.id === body.channelId);
-    if (starIdx !== -1) {
-      starred.splice(starIdx, 1);
-      writeJson(STARRED_PATH, starred);
-    }
-
-    const rejected: RejectedChannel[] = readJson(REJECTED_PATH);
-    if (!rejected.some((c) => c.id === body.channelId)) {
-      rejected.push({
-        name: body.channelName || "",
-        id: body.channelId,
-      });
-      writeJson(REJECTED_PATH, rejected);
-    }
-
-    if (body.newDecision === "unsubscribe") {
-      const unsub: Channel[] = readJson(UNSUB_PATH);
-      if (!unsub.some((c) => c.id === body.channelId)) {
-        unsub.push({ name: body.channelName || "", id: body.channelId });
-        writeJson(UNSUB_PATH, unsub);
-      }
-    }
-
-    return NextResponse.json({ ok: true });
-  }
-
-  // Send channel from New to Pending (filtered) for second look before final rejection
+  // Send to pending (filtered) from review
   if (body.action === "sendToPending" && body.channelId) {
-    // Remove from music-channels.json
-    const channels: Channel[] = readJson(CHANNELS_PATH);
-    const chIdx = channels.findIndex((c) => c.id === body.channelId);
-    if (chIdx !== -1) {
-      channels.splice(chIdx, 1);
-      writeJson(CHANNELS_PATH, channels);
-    }
-    // Add to filtered-channels.json (pending review)
-    const filtered: { name: string; id: string; topics: string[] }[] = readJson(FILTERED_PATH);
-    if (!filtered.some((c) => c.id === body.channelId)) {
-      filtered.push({ name: body.channelName || "", id: body.channelId, topics: ["Rejected from New"] });
-      writeJson(FILTERED_PATH, filtered);
-    }
+    await supabase
+      .from("curator_channels")
+      .update({ status: "filtered", notes: "Rejected from Review" })
+      .eq("channel_id", body.channelId);
     return NextResponse.json({ ok: true });
   }
 
-  // Rescue from Rejected → move to Pending (filtered) for second look
-  if (body.action === "rescueToFiltered" && body.channelId) {
-    const rejected: RejectedChannel[] = readJson(REJECTED_PATH);
-    const rejIdx = rejected.findIndex((c) => c.id === body.channelId);
-    let channelName = body.channelName || "";
-    if (rejIdx !== -1) {
-      if (!channelName) channelName = rejected[rejIdx].name;
-      rejected.splice(rejIdx, 1);
-      writeJson(REJECTED_PATH, rejected);
-    }
-    // Remove from music-channels too (prevent appearing in New AND Pending)
-    const channels: Channel[] = readJson(CHANNELS_PATH);
-    const chIdx = channels.findIndex((c) => c.id === body.channelId);
-    if (chIdx !== -1) {
-      channels.splice(chIdx, 1);
-      writeJson(CHANNELS_PATH, channels);
-    }
-    // Add to filtered (pending)
-    const filtered: { name: string; id: string; topics: string[] }[] = readJson(FILTERED_PATH);
-    if (!filtered.some((c) => c.id === body.channelId)) {
-      filtered.push({ name: channelName, id: body.channelId, topics: ["Rescued from Rejected"] });
-      writeJson(FILTERED_PATH, filtered);
-    }
-    return NextResponse.json({ ok: true });
-  }
-
-  // Confirm reject from Pending → move to final Rejected
-  if (body.action === "confirmRejectFiltered" && body.channelId) {
-    // Remove from filtered
-    const filtered: { name: string; id: string; topics: string[] }[] = readJson(FILTERED_PATH);
-    const idx = filtered.findIndex((c) => c.id === body.channelId);
-    let channelName = body.channelName || "";
-    if (idx !== -1) {
-      if (!channelName) channelName = filtered[idx].name;
-      filtered.splice(idx, 1);
-      writeJson(FILTERED_PATH, filtered);
-    }
-    // Add to rejected
-    const rejected: RejectedChannel[] = readJson(REJECTED_PATH);
-    if (!rejected.some((c) => c.id === body.channelId)) {
-      rejected.push({ name: channelName, id: body.channelId });
-      writeJson(REJECTED_PATH, rejected);
-    }
-    // Update registry
-    updateRegistry(body.channelId, { reviewedAt: new Date().toISOString() });
-    return NextResponse.json({ ok: true });
-  }
-
-  // Rescue a filtered channel → move to music-channels.json for review
-  if (body.action === "rescueFiltered" && body.channelId) {
-    const filtered: { name: string; id: string; topics: string[] }[] = readJson(FILTERED_PATH);
-    const idx = filtered.findIndex((c) => c.id === body.channelId);
-    let channelName = body.channelName || "";
-    if (idx !== -1) {
-      if (!channelName) channelName = filtered[idx].name;
-      filtered.splice(idx, 1);
-      writeJson(FILTERED_PATH, filtered);
-    }
-
-    const channels: Channel[] = readJson(CHANNELS_PATH);
-    if (!channels.some((c) => c.id === body.channelId)) {
-      channels.push({ name: channelName, id: body.channelId });
-      writeJson(CHANNELS_PATH, channels);
-    }
-
-    // Update registry
-    updateRegistry(body.channelId, { autoFiltered: false } as Partial<RegistryEntry>);
-
-    return NextResponse.json({ ok: true });
-  }
-
-  // Rescue a channel from rejected → music-channels (for review)
+  // Rescue from rejected → pending (music-channels / review)
   if (body.action === "rescueChannel" && body.channelId) {
-    const rejected: RejectedChannel[] = readJson(REJECTED_PATH);
-    const rejIdx = rejected.findIndex((c) => c.id === body.channelId);
-    let channelName = body.channelName || "";
-    if (rejIdx !== -1) {
-      if (!channelName) channelName = rejected[rejIdx].name;
-      rejected.splice(rejIdx, 1);
-      writeJson(REJECTED_PATH, rejected);
-    }
-
-    // Add to music-channels so it appears in Review tab
-    const channels: Channel[] = readJson(CHANNELS_PATH);
-    if (!channels.some((c) => c.id === body.channelId)) {
-      channels.push({ name: channelName, id: body.channelId });
-      writeJson(CHANNELS_PATH, channels);
-    }
-
+    await supabase
+      .from("curator_channels")
+      .update({ status: "pending", reviewed_at: null })
+      .eq("channel_id", body.channelId);
     return NextResponse.json({ ok: true });
   }
 
-  // Update labels on an approved channel
-  if (body.action === "updateLabels" && body.channelId && body.labels) {
-    const approved: ApprovedChannel[] = readJson(APPROVED_PATH);
-    const ch = approved.find((c) => c.id === body.channelId);
-    if (ch) {
-      ch.labels = body.labels;
-      writeJson(APPROVED_PATH, approved);
-    }
+  // Rescue from filtered → pending (review)
+  if (body.action === "rescueFiltered" && body.channelId) {
+    await supabase
+      .from("curator_channels")
+      .update({ status: "pending", reviewed_at: null, notes: null })
+      .eq("channel_id", body.channelId);
     return NextResponse.json({ ok: true });
   }
 
-  if (body.channelId) {
-    // Add channel to skipped list
-    const skipped: string[] = readJson(SKIPPED_PATH);
-    if (!skipped.includes(body.channelId)) {
-      skipped.push(body.channelId);
-      writeJson(SKIPPED_PATH, skipped);
-    }
-    return NextResponse.json({ ok: true, skippedCount: skipped.length });
+  // Rescue from rejected → filtered (pending review)
+  if (body.action === "rescueToFiltered" && body.channelId) {
+    await supabase
+      .from("curator_channels")
+      .update({ status: "filtered", notes: "Rescued from Rejected" })
+      .eq("channel_id", body.channelId);
+    return NextResponse.json({ ok: true });
   }
 
-  return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  // Confirm reject from filtered → rejected
+  if (body.action === "confirmRejectFiltered" && body.channelId) {
+    await supabase
+      .from("curator_channels")
+      .update({ status: "rejected", reviewed_at: new Date().toISOString() })
+      .eq("channel_id", body.channelId);
+    return NextResponse.json({ ok: true });
+  }
+
+  // Change decision (from approved → rejected)
+  if (body.action === "changeDecision" && body.channelId) {
+    await supabase
+      .from("curator_channels")
+      .update({ status: body.newDecision || "rejected", reviewed_at: new Date().toISOString(), labels: [] })
+      .eq("channel_id", body.channelId);
+    return NextResponse.json({ ok: true });
+  }
+
+  // Update labels
+  if (body.action === "updateLabels" && body.channelId) {
+    await supabase
+      .from("curator_channels")
+      .update({ labels: body.labels })
+      .eq("channel_id", body.channelId);
+    return NextResponse.json({ ok: true });
+  }
+
+  return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }
 
-export async function DELETE(req: NextRequest) {
-  const { channelId } = await req.json();
-  if (!channelId) {
-    return NextResponse.json(
-      { error: "channelId required" },
-      { status: 400 }
-    );
-  }
-
-  let channelData: ApprovedChannel | null = null;
-  let removedFrom: string | null = null;
-
-  // Try removing from approved
-  const approved: ApprovedChannel[] = readJson(APPROVED_PATH);
-  const approvedIdx = approved.findIndex((c) => c.id === channelId);
-  if (approvedIdx !== -1) {
-    channelData = approved[approvedIdx];
-    removedFrom = "approve";
-    approved.splice(approvedIdx, 1);
-    writeJson(APPROVED_PATH, approved);
-  }
-
-  // Try removing from rejected
-  const rejected: RejectedChannel[] = readJson(REJECTED_PATH);
-  const rejectedIdx = rejected.findIndex((c) => c.id === channelId);
-  if (rejectedIdx !== -1) {
-    if (!removedFrom) removedFrom = "reject";
-    rejected.splice(rejectedIdx, 1);
-    writeJson(REJECTED_PATH, rejected);
-  }
-
-  // Try removing from unsub
-  const unsub: Channel[] = readJson(UNSUB_PATH);
-  const unsubIdx = unsub.findIndex((c) => c.id === channelId);
-  if (unsubIdx !== -1) {
-    if (!channelData) channelData = { ...unsub[unsubIdx] };
-    if (!removedFrom) removedFrom = "unsubscribe";
-    unsub.splice(unsubIdx, 1);
-    writeJson(UNSUB_PATH, unsub);
-  }
-
-  // Also remove from skipped
-  const skipped: string[] = readJson(SKIPPED_PATH);
-  const skipIdx = skipped.indexOf(channelId);
-  if (skipIdx !== -1) {
-    skipped.splice(skipIdx, 1);
-    writeJson(SKIPPED_PATH, skipped);
-  }
-
-  return NextResponse.json({ ok: true, removedFrom, channel: channelData });
-}
-
+// PATCH: Toggle star
 export async function PATCH(req: NextRequest) {
-  const { channelId, channelName } = await req.json();
-  if (!channelId) {
-    return NextResponse.json(
-      { error: "channelId required" },
-      { status: 400 }
-    );
-  }
+  const { channelId } = await req.json();
 
-  const starred: Channel[] = readJson(STARRED_PATH);
-  const idx = starred.findIndex((c) => c.id === channelId);
+  const { data: ch } = await supabase
+    .from("curator_channels")
+    .select("starred")
+    .eq("channel_id", channelId)
+    .single();
 
-  if (idx !== -1) {
-    starred.splice(idx, 1);
-    writeJson(STARRED_PATH, starred);
-    return NextResponse.json({
-      ok: true,
-      starred: false,
-      starredCount: starred.length,
-    });
-  } else {
-    starred.push({ name: channelName || "", id: channelId });
-    writeJson(STARRED_PATH, starred);
-    return NextResponse.json({
-      ok: true,
-      starred: true,
-      starredCount: starred.length,
-    });
-  }
+  if (!ch) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const newStarred = !ch.starred;
+  await supabase
+    .from("curator_channels")
+    .update({ starred: newStarred })
+    .eq("channel_id", channelId);
+
+  return NextResponse.json({ starred: newStarred });
 }

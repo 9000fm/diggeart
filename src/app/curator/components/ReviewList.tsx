@@ -74,8 +74,8 @@ export function ReviewList({
         </div>
 
         <div className="space-y-3">
-          {syncError && (
-            <p className="text-xs text-red-400">Session expired — sign in again to sync</p>
+          {syncError && !syncDone && (
+            <p className="text-xs text-red-400">Sign in again to sync</p>
           )}
           <button
             onClick={onSync}
@@ -150,7 +150,7 @@ export function ReviewList({
           </button>
         </form>
       </div>
-      {syncError && (
+      {syncError && !syncDone && (
         <p className="text-[10px] text-red-400">Session expired — sign in again</p>
       )}
 

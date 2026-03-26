@@ -35,24 +35,62 @@ export function RejectedBrowser({
   onReviewChannel,
 }: RejectedBrowserProps) {
   const [search, setSearch] = useState("");
+  const [sortMode, setSortMode] = useState<"recent" | "az">("recent");
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return channels;
-    const q = search.toLowerCase();
-    return channels.filter((c) => c.name.toLowerCase().includes(q));
-  }, [channels, search]);
+    let result = channels;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((c) => c.name.toLowerCase().includes(q));
+    }
+    if (sortMode === "recent") {
+      result = [...result].sort((a, b) => {
+        if (!a.reviewedAt && !b.reviewedAt) return 0;
+        if (!a.reviewedAt) return 1;
+        if (!b.reviewedAt) return -1;
+        return new Date(b.reviewedAt).getTime() - new Date(a.reviewedAt).getTime();
+      });
+    } else {
+      result = [...result].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return result;
+  }, [channels, search, sortMode]);
 
   return (
     <div className="space-y-3 pb-8">
-      {channels.length > 5 && (
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search rejected channels..."
-          className="w-full bg-[var(--bg-alt)] border border-[var(--border)] rounded-lg px-4 py-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/40 focus:outline-none focus:border-[var(--text-muted)] transition-colors font-mono"
-        />
-      )}
+      <div className="flex items-center gap-2">
+        {channels.length > 5 && (
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search rejected channels..."
+            className="flex-1 bg-[var(--bg-alt)] border border-[var(--border)] rounded-lg px-4 py-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]/40 focus:outline-none focus:border-[var(--text-muted)] transition-colors font-mono"
+          />
+        )}
+        <div className="flex items-center border border-[var(--border)] rounded-lg overflow-hidden shrink-0">
+          <button
+            onClick={() => setSortMode("recent")}
+            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+              sortMode === "recent"
+                ? "bg-[var(--accent)] text-[var(--accent-text)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text)]"
+            }`}
+          >
+            Recent
+          </button>
+          <button
+            onClick={() => setSortMode("az")}
+            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+              sortMode === "az"
+                ? "bg-[var(--accent)] text-[var(--accent-text)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text)]"
+            }`}
+          >
+            A-Z
+          </button>
+        </div>
+      </div>
 
       <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-[0.2em] pt-3">
         {filtered.length} rejected channel{filtered.length !== 1 ? "s" : ""}

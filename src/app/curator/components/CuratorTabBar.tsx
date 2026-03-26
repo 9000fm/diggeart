@@ -19,8 +19,8 @@ export function CuratorTabBar({
 }: CuratorTabBarProps) {
   const tabs: { key: CuratorTab; label: string; badge?: number; color?: string }[] = [
     { key: "approved", label: "Approved", badge: approvedCount, color: "text-emerald-500" },
-    { key: "review", label: "Review", badge: reviewCount, color: "text-[var(--text-secondary)]" },
     { key: "rejected", label: "Rejected", badge: rejectedCount },
+    { key: "review", label: "Review", badge: reviewCount, color: "text-[var(--text-secondary)]" },
   ];
 
   return (
