@@ -3,7 +3,14 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
-const store = new Map<string, CacheEntry<unknown>>();
+// Attach to globalThis so the cache survives Vercel warm invocations and Next.js hot reloads
+const globalStore = globalThis as typeof globalThis & {
+  __digeartCache?: Map<string, CacheEntry<unknown>>;
+};
+if (!globalStore.__digeartCache) {
+  globalStore.__digeartCache = new Map();
+}
+const store = globalStore.__digeartCache;
 
 const DEFAULT_TTL = 30 * 60 * 1000; // 30 minutes
 

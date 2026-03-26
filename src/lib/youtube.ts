@@ -6,6 +6,46 @@ import type { CardData } from "./types";
 const API_KEY = process.env.YOUTUBE_API_KEY!;
 const YT_API = "https://www.googleapis.com/youtube/v3";
 
+/* ── Tag type ────────────────────────────────────────────────────────── */
+
+export type Tag = "all" | "hot" | "rare" | "new";
+
+const VALID_TAGS: Tag[] = ["all", "hot", "rare", "new"];
+
+export function isValidTag(v: string | null | undefined): v is Tag {
+  return VALID_TAGS.includes(v as Tag);
+}
+
+/* ── Seeded PRNG (mulberry32) ────────────────────────────────────────── */
+
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Daily seed — same value across all Vercel instances for the same day */
+function dailySeed(): number {
+  return Math.floor(Date.now() / 86_400_000);
+}
+
+/** Fisher-Yates shuffle with seeded PRNG — deterministic per day */
+function seededShuffle<T>(arr: T[]): T[] {
+  const out = [...arr];
+  const rand = mulberry32(dailySeed());
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/* ── Shared types & constants ────────────────────────────────────────── */
+
 interface YouTubeVideo {
   id: string;
   title: string;
@@ -16,6 +56,7 @@ interface YouTubeVideo {
   duration: number | null;
   viewCount: number | null;
   publishedAt: string | null;
+  description: string | null;
 }
 
 const NON_MUSIC_KEYWORDS = [
@@ -49,43 +90,36 @@ function isNonMusic(title: string): boolean {
 
 /* ── Feed-separation filters ─────────────────────────────────────────── */
 
-/** Labels that are sample/niche-only (no electronic overlap) */
 const NON_ELECTRONIC_ONLY_LABELS = [
   "Samples", "Experimental", "Pop", "World", "Jazz", "Hip Hop", "Reggae",
+  "Rock", "Alternative", "Indie", "Metal", "Punk", "Folk", "Country",
+  "Classical", "R&B", "Soul", "Blues", "Funk",
 ];
 
-/** Title keywords that indicate sample/niche content (not for homepage) */
 const HOMEPAGE_TITLE_EXCLUDES = [
-  // sample / digger content
   "sample", "samples", "drum break", "drum breaks", "breaks compilation",
-  // non-electronic genres
   "rock", "metal", "punk", "grunge", "classic rock",
-  // mix / set content (belongs in mixes feed)
+  "alternative", "indie rock", "folk", "country", "classical", "blues", "r&b", "soul",
   "dj set", "dj mix", "live set", "live mix", "b2b", "boiler room",
 ];
 
-/** Title keywords that signal sample/rare/niche content (positive match for samples feed) */
 const SAMPLE_TITLE_KEYWORDS = [
   "sample", "rare", "obscure", "ost", "soundtrack", "library",
   "private press", "unreleased", "forgotten",
 ];
 
-/** Title keywords required for a video to appear in the mixes feed */
 const MIX_TITLE_KEYWORDS = [
   "mix", "set", "dj", "live", "b2b", "session", "boiler room", "recorded at",
 ];
 
-/** Exact labels that qualify a channel for the mixes feed */
 const MIX_CHANNEL_LABELS = ["DJ Sets", "Live Sets"];
 
-/** Check whether a channel's labels are exclusively non-electronic */
 function isNonElectronicOnly(labels: string[]): boolean {
   return labels.every((l) =>
     NON_ELECTRONIC_ONLY_LABELS.some((nl) => nl.toLowerCase() === l.toLowerCase())
   );
 }
 
-/** Check if a title contains any keyword from a list */
 function titleContainsAny(title: string, keywords: string[]): boolean {
   const lower = title.toLowerCase();
   return keywords.some((kw) => lower.includes(kw));
@@ -101,6 +135,33 @@ export function parseDuration(iso: string): number {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
+/* ── Tag filtering utility ───────────────────────────────────────────── */
+
+/**
+ * Filter + sort a card pool by tag BEFORE offset/limit slicing.
+ * Returns the filtered array (full length — caller slices).
+ */
+export function applyTagFilter(pool: CardData[], tag: Tag): CardData[] {
+  switch (tag) {
+    case "hot":
+      return pool.filter((c) => c.viewCount != null && c.viewCount >= 50_000);
+    case "rare":
+      return pool.filter((c) => c.viewCount != null && c.viewCount < 5_000);
+    case "new": {
+      const thirtyDaysMs = 30 * 86_400_000;
+      const now = Date.now();
+      return pool.filter(
+        (c) => c.publishedAt && now - new Date(c.publishedAt).getTime() <= thirtyDaysMs
+      );
+    }
+    case "all":
+    default:
+      return pool;
+  }
+}
+
+/* ── YouTube helpers ─────────────────────────────────────────────────── */
+
 /** Batch-fetch durations + view counts for video IDs via videos.list */
 async function fetchVideoDetails(
   videoIds: string[]
@@ -108,7 +169,6 @@ async function fetchVideoDetails(
   const details = new Map<string, { duration: number; viewCount: number }>();
   if (videoIds.length === 0) return details;
 
-  // YouTube allows max 50 IDs per request
   const chunks: string[][] = [];
   for (let i = 0; i < videoIds.length; i += 50) {
     chunks.push(videoIds.slice(i, i + 50));
@@ -141,90 +201,104 @@ async function fetchVideoDetails(
   return details;
 }
 
-/**
- * Only use approved channels. If none approved yet, returns empty array
- * (YT feed will be empty until channels are curated via /curator).
- */
 export function sampleChannels(n: number): { name: string; id: string; labels?: string[] }[] {
   const pool = approvedChannels.length > 0 ? approvedChannels : musicChannels;
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, n);
+  return seededShuffle(pool).slice(0, n);
 }
 
 function uploadsPlaylistId(channelId: string): string {
   return "UU" + channelId.slice(2);
 }
 
+/**
+ * Fetch uploads from a channel's uploads playlist.
+ * `maxPages` controls YouTube API pagination (each page ≤ maxResults items).
+ */
 export async function getChannelUploads(
   channelId: string,
   maxResults = 5,
   withDuration = false,
-  skipCache = false
+  skipCache = false,
+  maxPages = 1
 ): Promise<YouTubeVideo[]> {
-  const cacheKey = `yt-uploads-${channelId}-${maxResults}-${withDuration ? "dur" : "nodur"}`;
+  const cacheKey = `yt-uploads-${channelId}-${maxResults}-${withDuration ? "dur" : "nodur"}-p${maxPages}`;
   if (!skipCache) {
     const cached = cacheGet<YouTubeVideo[]>(cacheKey);
     if (cached) return cached;
   }
 
   const playlistId = uploadsPlaylistId(channelId);
-  const params = new URLSearchParams({
-    part: "snippet",
-    playlistId,
-    maxResults: String(maxResults),
-    key: API_KEY,
-  });
+  const allVideos: YouTubeVideo[] = [];
+  let pageToken: string | undefined;
 
-  const res = await fetch(`${YT_API}/playlistItems?${params}`, {
-    next: { revalidate: 3600 },
-  });
+  for (let page = 0; page < maxPages; page++) {
+    const params = new URLSearchParams({
+      part: "snippet",
+      playlistId,
+      maxResults: String(maxResults),
+      key: API_KEY,
+    });
+    if (pageToken) params.set("pageToken", pageToken);
 
-  if (!res.ok) {
-    console.error(`YouTube uploads error for ${channelId}:`, res.status);
-    return [];
+    const res = await fetch(`${YT_API}/playlistItems?${params}`, {
+      next: { revalidate: 3600 },
+    });
+
+    if (!res.ok) {
+      console.error(`YouTube uploads error for ${channelId}:`, res.status);
+      break;
+    }
+
+    const data = await res.json();
+    const videos: YouTubeVideo[] = (data.items || [])
+      .filter((item: { snippet?: { resourceId?: { videoId?: string } } }) =>
+        item.snippet?.resourceId?.videoId
+      )
+      .map(
+        (item: {
+          snippet: {
+            resourceId: { videoId: string };
+            title: string;
+            channelTitle: string;
+            publishedAt?: string;
+            description?: string;
+            thumbnails?: {
+              high?: { url: string; width?: number; height?: number };
+              medium?: { url: string; width?: number; height?: number };
+              default?: { url: string; width?: number; height?: number };
+            };
+          };
+        }) => {
+          const thumb =
+            item.snippet.thumbnails?.high ||
+            item.snippet.thumbnails?.medium ||
+            item.snippet.thumbnails?.default;
+          return {
+            id: item.snippet.resourceId.videoId,
+            title: item.snippet.title,
+            channelTitle: item.snippet.channelTitle,
+            thumbnail: thumb?.url || "",
+            width: thumb?.width || 480,
+            height: thumb?.height || 360,
+            duration: null as number | null,
+            viewCount: null as number | null,
+            publishedAt: item.snippet.publishedAt || null,
+            description: item.snippet.description || null,
+          };
+        }
+      );
+
+    allVideos.push(...videos);
+
+    // Check for next page
+    pageToken = data.nextPageToken;
+    if (!pageToken) break;
   }
 
-  const data = await res.json();
-  const videos: YouTubeVideo[] = (data.items || [])
-    .filter((item: { snippet?: { resourceId?: { videoId?: string } } }) =>
-      item.snippet?.resourceId?.videoId
-    )
-    .map(
-      (item: {
-        snippet: {
-          resourceId: { videoId: string };
-          title: string;
-          channelTitle: string;
-          publishedAt?: string;
-          thumbnails?: {
-            high?: { url: string; width?: number; height?: number };
-            medium?: { url: string; width?: number; height?: number };
-            default?: { url: string; width?: number; height?: number };
-          };
-        };
-      }) => {
-        const thumb =
-          item.snippet.thumbnails?.high ||
-          item.snippet.thumbnails?.medium ||
-          item.snippet.thumbnails?.default;
-        return {
-          id: item.snippet.resourceId.videoId,
-          title: item.snippet.title,
-          channelTitle: item.snippet.channelTitle,
-          thumbnail: thumb?.url || "",
-          width: thumb?.width || 480,
-          height: thumb?.height || 360,
-          duration: null,
-          viewCount: null,
-          publishedAt: item.snippet.publishedAt || null,
-        };
-      }
-    );
-
   // Fetch durations + view counts
-  if (videos.length > 0) {
-    const details = await fetchVideoDetails(videos.map((v) => v.id));
-    for (const v of videos) {
+  if (allVideos.length > 0) {
+    const details = await fetchVideoDetails(allVideos.map((v) => v.id));
+    for (const v of allVideos) {
       const d = details.get(v.id);
       if (d) {
         v.duration = d.duration;
@@ -233,8 +307,8 @@ export async function getChannelUploads(
     }
   }
 
-  cacheSet(cacheKey, videos);
-  return videos;
+  cacheSet(cacheKey, allVideos);
+  return allVideos;
 }
 
 export function parseVideoTitle(
@@ -289,30 +363,49 @@ function videoToCard(v: YouTubeVideo): CardData {
     duration: v.duration,
     viewCount: v.viewCount,
     publishedAt: v.publishedAt,
+    description: v.description,
   };
 }
 
-/**
- * Build the full discover pool: ALL approved channels × 20 uploads each.
- * Cached for 1 hour. Returns RAW unshuffled pool — shuffling happens per-call.
- */
-async function getDiscoverPool(): Promise<CardData[]> {
-  const cacheKey = "yt-discover-pool-v4";
+/* ── Pool return type ────────────────────────────────────────────────── */
+
+interface PoolResult {
+  cards: CardData[];
+  totalFiltered: number;
+}
+
+/* ── Genre label filtering ────────────────────────────────────────────── */
+
+function filterChannelsByGenre(
+  channels: { name: string; id: string; labels?: string[] }[],
+  genre?: string
+): { name: string; id: string; labels?: string[] }[] {
+  if (!genre) return channels;
+  const lower = genre.toLowerCase();
+  return channels.filter(
+    (c) => c.labels?.some((l) => l.toLowerCase() === lower)
+  );
+}
+
+/* ── Discover (homepage) ─────────────────────────────────────────────── */
+
+async function getDiscoverPool(genre?: string): Promise<CardData[]> {
+  const cacheKey = genre ? `yt-discover-pool-v5-g-${genre.toLowerCase()}` : "yt-discover-pool-v5";
   const cached = cacheGet<CardData[]>(cacheKey);
   if (cached && cached.length > 0) return cached;
 
   const allApproved = [...approvedChannels] as { name: string; id: string; labels?: string[] }[];
 
-  // Only use labeled channels whose labels overlap with electronic genres
-  const homepageChannels = allApproved.filter((c) => {
-    if (!c.labels || c.labels.length === 0) return false;   // skip unlabeled
-    if (isNonElectronicOnly(c.labels)) return false;         // skip pure sample/niche channels
+  let homepageChannels = allApproved.filter((c) => {
+    if (!c.labels || c.labels.length === 0) return false;
+    if (isNonElectronicOnly(c.labels)) return false;
     return true;
   });
 
+  homepageChannels = filterChannelsByGenre(homepageChannels, genre);
+
   const allVideos: YouTubeVideo[] = [];
 
-  // Fetch 20 uploads per channel, in batches to avoid overwhelming
   const BATCH_SIZE = 10;
   for (let i = 0; i < homepageChannels.length; i += BATCH_SIZE) {
     const batch = homepageChannels.slice(i, i + BATCH_SIZE);
@@ -326,68 +419,74 @@ async function getDiscoverPool(): Promise<CardData[]> {
     }
   }
 
-  const pool = allVideos
-    .filter((v) => {
-      if (v.title === "Private video" || v.title === "Deleted video") return false;
-      const lower = v.title.toLowerCase();
-      if (lower.includes("#shorts") || lower.includes("#short")) return false;
-      if (lower.includes("shorts") && lower.length < 80) return false;
-      if (v.height > v.width) return false;
-      if (isNonMusic(v.title)) return false;
-      // Duration: only individual tracks (4–15 min)
-      if (!v.duration || v.duration < 240 || v.duration > 900) return false;
-      // Exclude sample/digger and non-electronic title keywords
-      if (titleContainsAny(v.title, HOMEPAGE_TITLE_EXCLUDES)) return false;
-      return true;
-    })
-    .map(videoToCard)
-    .sort(() => Math.random() - 0.5);
+  const pool = seededShuffle(
+    allVideos
+      .filter((v) => {
+        if (v.title === "Private video" || v.title === "Deleted video") return false;
+        const lower = v.title.toLowerCase();
+        if (lower.includes("#shorts") || lower.includes("#short")) return false;
+        if (lower.includes("shorts") && lower.length < 80) return false;
+        if (v.height > v.width) return false;
+        if (isNonMusic(v.title)) return false;
+        if (!v.duration || v.duration < 240 || v.duration > 900) return false;
+        if (titleContainsAny(v.title, HOMEPAGE_TITLE_EXCLUDES)) return false;
+        return true;
+      })
+      .map(videoToCard)
+  );
 
-  // Cache shuffled pool — stable order for pagination within cache window
   cacheSet(cacheKey, pool);
   return pool;
 }
 
-export async function discoverFromYouTube(limit = 30, offset = 0, sort?: string): Promise<CardData[]> {
-  if (approvedChannels.length === 0) return [];
+export async function discoverFromYouTube(
+  limit = 30,
+  offset = 0,
+  tag: Tag = "all",
+  genre?: string
+): Promise<PoolResult> {
+  if (approvedChannels.length === 0) return { cards: [], totalFiltered: 0 };
 
-  const pool = await getDiscoverPool();
-  if (pool.length === 0) return [];
+  const pool = await getDiscoverPool(genre);
+  if (pool.length === 0) return { cards: [], totalFiltered: 0 };
 
-  if (sort === "top") {
-    const sorted = [...pool]
-      .filter((c) => c.viewCount != null && c.viewCount > 0)
-      .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0));
-    return sorted.slice(offset, offset + limit);
-  }
-
-  return pool.slice(offset, offset + limit);
+  const filtered = applyTagFilter(pool, tag);
+  return {
+    cards: filtered.slice(offset, offset + limit),
+    totalFiltered: filtered.length,
+  };
 }
 
-/** Discover long-form mixes (DJ sets, live recordings >40min) */
-export async function discoverMixes(limit = 20, offset = 0, sort?: string): Promise<CardData[]> {
-  if (approvedChannels.length === 0) return [];
+/* ── Mixes ───────────────────────────────────────────────────────────── */
 
-  const cacheKey = "yt-mixes-pool-v2";
+export async function discoverMixes(
+  limit = 20,
+  offset = 0,
+  tag: Tag = "all",
+  genre?: string
+): Promise<PoolResult> {
+  if (approvedChannels.length === 0) return { cards: [], totalFiltered: 0 };
+
+  const cacheKey = genre ? `yt-mixes-pool-v3-g-${genre.toLowerCase()}` : "yt-mixes-pool-v3";
   let pool = cacheGet<CardData[]>(cacheKey);
 
   if (!pool || pool.length === 0) {
     const allApproved = [...approvedChannels] as { name: string; id: string; labels?: string[] }[];
 
-    // Only use channels with explicit mix labels — no random other channels
-    const mixChannels = allApproved.filter(
+    let mixChannels = allApproved.filter(
       (c) => c.labels?.some((l) =>
         MIX_CHANNEL_LABELS.some((ml) => ml.toLowerCase() === l.toLowerCase())
       )
     );
 
-    if (mixChannels.length === 0) return [];
+    mixChannels = filterChannelsByGenre(mixChannels, genre);
 
-    const shuffledMix = [...mixChannels].sort(() => Math.random() - 0.5);
+    if (mixChannels.length === 0) return { cards: [], totalFiltered: 0 };
 
     const allVideos: YouTubeVideo[] = [];
+    // 2 pages of 50 per channel → up to 100 videos each
     const results = await Promise.allSettled(
-      shuffledMix.map((ch) => getChannelUploads(ch.id, 10, true))
+      mixChannels.map((ch) => getChannelUploads(ch.id, 50, true, false, 2))
     );
 
     for (const result of results) {
@@ -396,68 +495,77 @@ export async function discoverMixes(limit = 20, offset = 0, sort?: string): Prom
       }
     }
 
-    // Filter for long-form content (>40min) with mix-related titles
-    pool = allVideos
-      .filter((v) => {
-        if (v.title === "Private video" || v.title === "Deleted video") return false;
-        if (!v.duration || v.duration < 2400) return false;
-        const lower = v.title.toLowerCase();
-        if (lower.includes("#shorts") || lower.includes("#short")) return false;
-        // Require mix-related keywords in title
-        if (!titleContainsAny(v.title, MIX_TITLE_KEYWORDS)) return false;
-        return true;
-      })
-      .map(videoToCard)
-      .sort(() => Math.random() - 0.5);
+    pool = seededShuffle(
+      allVideos
+        .filter((v) => {
+          if (v.title === "Private video" || v.title === "Deleted video") return false;
+          if (!v.duration || v.duration < 2400) return false;
+          const lower = v.title.toLowerCase();
+          if (lower.includes("#shorts") || lower.includes("#short")) return false;
+          // Trust labeled mix channels — only require >40min duration.
+          // For safety, still exclude obvious non-mix content.
+          if (!titleContainsAny(v.title, MIX_TITLE_KEYWORDS)) {
+            // If no keyword match, still allow from labeled channels (trust the label)
+            // but skip if it looks like a tutorial or non-music
+            if (isNonMusic(v.title)) return false;
+          }
+          return true;
+        })
+        .map(videoToCard)
+    );
 
     cacheSet(cacheKey, pool);
   }
 
-  if (sort === "top") {
-    const sorted = [...pool]
-      .filter((c) => c.viewCount != null && c.viewCount > 0)
-      .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0));
-    return sorted.slice(offset, offset + limit);
-  }
-
-  return pool.slice(offset, offset + limit);
+  const filtered = applyTagFilter(pool, tag);
+  return {
+    cards: filtered.slice(offset, offset + limit),
+    totalFiltered: filtered.length,
+  };
 }
 
-/** Discover short-form samples/tracks from sample-specific channels */
+/* ── Samples ─────────────────────────────────────────────────────────── */
+
 const STRICT_SAMPLE_LABELS = [
   "Samples", "Experimental", "Ambient", "Funk", "Disco", "Jazz",
   "Hip Hop", "Dub", "World", "Pop", "Downtempo", "Industrial", "Reggae",
 ];
 
-export async function discoverSamples(limit = 30, offset = 0, sort?: string): Promise<CardData[]> {
-  if (approvedChannels.length === 0) return [];
+export async function discoverSamples(
+  limit = 30,
+  offset = 0,
+  tag: Tag = "all",
+  genre?: string
+): Promise<PoolResult> {
+  if (approvedChannels.length === 0) return { cards: [], totalFiltered: 0 };
 
-  const cacheKey = "yt-samples-pool-v2";
+  const cacheKey = genre ? `yt-samples-pool-v3-g-${genre.toLowerCase()}` : "yt-samples-pool-v3";
   let pool = cacheGet<CardData[]>(cacheKey);
 
   if (!pool || pool.length === 0) {
     const allApproved = [...approvedChannels] as { name: string; id: string; labels?: string[] }[];
 
-    // Channels that have at least one of the strict sample labels
-    const sampleChannelPool = allApproved.filter(
+    let sampleChannelPool = allApproved.filter(
       (c) => c.labels?.some((l) =>
         STRICT_SAMPLE_LABELS.some((sl) => l.toLowerCase() === sl.toLowerCase())
       )
     );
 
-    // Also include ALL approved channels for title-based matching
-    const otherChannels = allApproved.filter(
+    let otherChannels = allApproved.filter(
       (c) => !sampleChannelPool.some((sc) => sc.id === c.id)
     );
 
-    // Sample-labeled channels get more uploads fetched
-    const shuffledSample = [...sampleChannelPool].sort(() => Math.random() - 0.5).slice(0, 12);
-    const shuffledOther = [...otherChannels].sort(() => Math.random() - 0.5).slice(0, 8);
+    sampleChannelPool = filterChannelsByGenre(sampleChannelPool, genre);
+    otherChannels = filterChannelsByGenre(otherChannels, genre);
+
+    // More channels, more uploads per channel
+    const shuffledSample = seededShuffle(sampleChannelPool).slice(0, 20);
+    const shuffledOther = seededShuffle(otherChannels).slice(0, 10);
 
     const allVideos: { video: YouTubeVideo; fromSampleChannel: boolean }[] = [];
 
     const sampleResults = await Promise.allSettled(
-      shuffledSample.map((ch) => getChannelUploads(ch.id, 10, true))
+      shuffledSample.map((ch) => getChannelUploads(ch.id, 20, true))
     );
     for (const result of sampleResults) {
       if (result.status === "fulfilled") {
@@ -468,7 +576,7 @@ export async function discoverSamples(limit = 30, offset = 0, sort?: string): Pr
     }
 
     const otherResults = await Promise.allSettled(
-      shuffledOther.map((ch) => getChannelUploads(ch.id, 8, true))
+      shuffledOther.map((ch) => getChannelUploads(ch.id, 15, true))
     );
     for (const result of otherResults) {
       if (result.status === "fulfilled") {
@@ -478,31 +586,28 @@ export async function discoverSamples(limit = 30, offset = 0, sort?: string): Pr
       }
     }
 
-    pool = allVideos
-      .filter(({ video: v, fromSampleChannel }) => {
-        if (v.title === "Private video" || v.title === "Deleted video") return false;
-        if (!v.duration || v.duration > 900 || v.duration < 30) return false;
-        const lower = v.title.toLowerCase();
-        if (lower.includes("#shorts") || lower.includes("#short")) return false;
-        if (lower.includes("shorts") && lower.length < 80) return false;
-        if (v.height > v.width) return false;
-        if (isNonMusic(v.title)) return false;
-        // Videos from non-sample channels must have a sample keyword in title
-        if (!fromSampleChannel && !titleContainsAny(v.title, SAMPLE_TITLE_KEYWORDS)) return false;
-        return true;
-      })
-      .map(({ video }) => videoToCard(video))
-      .sort(() => Math.random() - 0.5);
+    pool = seededShuffle(
+      allVideos
+        .filter(({ video: v, fromSampleChannel }) => {
+          if (v.title === "Private video" || v.title === "Deleted video") return false;
+          if (!v.duration || v.duration > 900 || v.duration < 30) return false;
+          const lower = v.title.toLowerCase();
+          if (lower.includes("#shorts") || lower.includes("#short")) return false;
+          if (lower.includes("shorts") && lower.length < 80) return false;
+          if (v.height > v.width) return false;
+          if (isNonMusic(v.title)) return false;
+          if (!fromSampleChannel && !titleContainsAny(v.title, SAMPLE_TITLE_KEYWORDS)) return false;
+          return true;
+        })
+        .map(({ video }) => videoToCard(video))
+    );
 
     cacheSet(cacheKey, pool);
   }
 
-  if (sort === "top") {
-    const sorted = [...pool]
-      .filter((c) => c.viewCount != null && c.viewCount > 0)
-      .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0));
-    return sorted.slice(offset, offset + limit);
-  }
-
-  return pool.slice(offset, offset + limit);
+  const filtered = applyTagFilter(pool, tag);
+  return {
+    cards: filtered.slice(offset, offset + limit),
+    totalFiltered: filtered.length,
+  };
 }

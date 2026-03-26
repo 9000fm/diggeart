@@ -274,7 +274,7 @@ export function QueueAuditView({
               onClick={onExit}
               className="px-6 py-2.5 bg-[var(--bg-alt)] border border-[var(--border)] text-sm uppercase tracking-wider hover:border-[var(--text-muted)] transition-colors"
             >
-              BACK TO APPROVED
+              BACK TO LIBRARY
             </button>
           </div>
         </div>

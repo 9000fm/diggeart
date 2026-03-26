@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import MusicCard from "./MusicCard";
 import { GENRE_PRESETS } from "./Sidebar";
 import type { CardData } from "@/lib/types";
@@ -18,6 +18,7 @@ interface DiscoverGridProps {
   onToggleLike: (id: string) => void;
   activeGenre: number;
   activeTagFilter?: TagFilter;
+  activeGenreLabel?: string | null;
   onCardsLoaded?: (cards: CardData[]) => void;
   isAuthenticated?: boolean;
 }
@@ -33,6 +34,7 @@ export default function DiscoverGrid({
   onToggleLike,
   activeGenre,
   activeTagFilter = "all",
+  activeGenreLabel = null,
   onCardsLoaded,
   isAuthenticated = true,
 }: DiscoverGridProps) {
@@ -44,7 +46,7 @@ export default function DiscoverGrid({
   const hasMore = useRef(true);
 
   const fetchCards = useCallback(
-    async (genreIndex: number, append = false, sort?: string) => {
+    async (genreIndex: number, tag: TagFilter, genreLabel: string | null, append = false) => {
       if (append && !hasMore.current) return;
       if (append) setLoadingMore(true);
       else { setLoading(true); hasMore.current = true; }
@@ -53,14 +55,14 @@ export default function DiscoverGrid({
         const limit = 30;
         const genres = GENRE_PRESETS[genreIndex].genres.join(",");
         const offset = append ? pageRef.current * limit : 0;
-        let url = `/api/discover?genres=${genres}&limit=${limit}&offset=${offset}`;
-        if (sort) url += `&sort=${sort}`;
+        let url = `/api/discover?genres=${genres}&limit=${limit}&offset=${offset}&tag=${tag}`;
+        if (genreLabel) url += `&genre=${encodeURIComponent(genreLabel)}`;
         const res = await fetch(url);
         const data = await res.json();
         const newCards: CardData[] = data.cards || [];
         onCardsLoaded?.(newCards);
 
-        if (newCards.length < limit) hasMore.current = false;
+        hasMore.current = data.hasMore === true;
 
         if (append) {
           setCards((prev) => {
@@ -80,23 +82,23 @@ export default function DiscoverGrid({
         setLoadingMore(false);
       }
     },
-    []
+    [] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+  // Refetch on ANY tag change (not just top toggle)
   const prevTagRef = useRef(activeTagFilter);
+  const prevGenreLabelRef = useRef(activeGenreLabel);
   useEffect(() => {
-    const wasTop = prevTagRef.current === "top";
-    const isTop = activeTagFilter === "top";
-    prevTagRef.current = activeTagFilter;
-    // Refetch when switching to/from "top" sort
-    if (wasTop !== isTop) {
-      fetchCards(activeGenre, false, isTop ? "top" : undefined);
+    if (prevTagRef.current !== activeTagFilter || prevGenreLabelRef.current !== activeGenreLabel) {
+      prevTagRef.current = activeTagFilter;
+      prevGenreLabelRef.current = activeGenreLabel;
+      fetchCards(activeGenre, activeTagFilter, activeGenreLabel);
     }
-  }, [activeTagFilter, activeGenre, fetchCards]);
+  }, [activeTagFilter, activeGenreLabel, activeGenre, fetchCards]);
 
   useEffect(() => {
-    fetchCards(activeGenre, false, activeTagFilter === "top" ? "top" : undefined);
-  }, [activeGenre, fetchCards]);
+    fetchCards(activeGenre, activeTagFilter, activeGenreLabel);
+  }, [activeGenre, fetchCards]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -107,7 +109,7 @@ export default function DiscoverGrid({
           !loadingMore &&
           cards.length > 0
         ) {
-          fetchCards(activeGenre, true, activeTagFilter === "top" ? "top" : undefined);
+          fetchCards(activeGenre, activeTagFilter, activeGenreLabel, true);
         }
       },
       { rootMargin: "400px" }
@@ -118,7 +120,7 @@ export default function DiscoverGrid({
     return () => {
       if (el) observer.unobserve(el);
     };
-  }, [activeGenre, loading, loadingMore, cards.length, fetchCards]);
+  }, [activeGenre, activeTagFilter, activeGenreLabel, loading, loadingMore, cards.length, fetchCards]);
 
   const shareCard = async (card: CardData) => {
     const url = card.youtubeUrl || "";
@@ -132,32 +134,14 @@ export default function DiscoverGrid({
     }
   };
 
-  const baseCards = showSavedOnly
+  const displayCards = showSavedOnly
     ? cards.filter((c) => savedIds.has(c.id))
     : cards;
-
-  const top10Ids = useMemo(() => {
-    const sorted = [...cards]
-      .filter((c) => c.viewCount != null && c.viewCount > 0)
-      .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0));
-    return new Set(sorted.slice(0, 10).map((c) => c.id));
-  }, [cards]);
-
-  const displayCards = useMemo(() => {
-    if (activeTagFilter === "all") return baseCards;
-    if (activeTagFilter === "top") return baseCards; // server already sorted by viewCount
-    return baseCards.filter((card) => {
-      if (activeTagFilter === "hot") return card.viewCount != null && card.viewCount >= 100_000;
-      if (activeTagFilter === "rare") return card.viewCount != null && card.viewCount < 5_000;
-      if (activeTagFilter === "new") return card.publishedAt && (Date.now() - new Date(card.publishedAt).getTime()) / 86400000 <= 30;
-      return true;
-    });
-  }, [baseCards, activeTagFilter, top10Ids]);
 
   return (
     <>
       {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-[11px] p-2 sm:p-[11px]">
+        <div className="dot-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-[11px] p-2 sm:p-[11px]">
           {Array.from({ length: 20 }).map((_, i) => (
             <div
               key={i}
@@ -175,14 +159,15 @@ export default function DiscoverGrid({
               <p className="font-mono text-sm text-[var(--text-muted)] uppercase">No saved tracks yet</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-[11px] p-2 sm:p-[11px]">
+            <div className="dot-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-[11px] p-2 sm:p-[11px]">
               {displayCards.map((card) => (
                 <MusicCard
                   key={card.id}
                   card={card}
                   saved={likedIds.has(card.id)}
                   isPlaying={playingId === card.id && isPlaying}
-                  isTop10={top10Ids.has(card.id)}
+                  activeTagFilter={activeTagFilter}
+                  viewContext="home"
                   onPlay={() => onPlay(card.id)}
                   onSave={() => onToggleLike(card.id)}
                   onShare={() => shareCard(card)}

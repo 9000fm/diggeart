@@ -18,7 +18,9 @@ import { ReviewEmptyState } from "./components/ReviewEmptyState";
 import { ApprovedBrowser } from "./components/ApprovedBrowser";
 import { AuditMode } from "./components/AuditMode";
 import { QueueAuditView } from "./components/QueueAuditView";
-import { CuratorOps } from "./components/CuratorOps";
+import { RejectedBrowser } from "./components/RejectedBrowser";
+import { GearMenu } from "./components/GearMenu";
+import AuthButton from "@/components/AuthButton";
 
 export default function CuratorPage() {
   const [activeTab, setActiveTab] = useState<CuratorTab>("review");
@@ -28,6 +30,7 @@ export default function CuratorPage() {
   const [approvedView, setApprovedView] = useState<ApprovedView>({
     mode: "landing",
   });
+  const [gearOpen, setGearOpen] = useState(false);
 
   const {
     data,
@@ -39,12 +42,19 @@ export default function CuratorPage() {
     approvedLoading,
     rejectedChannels,
     rejectedLoading,
+    filteredChannels,
+    filteredLoading,
+    newSubCount,
+    setNewSubCount,
+    subCheckError,
     fetchNext,
     fetchStats,
     fetchApproved,
     fetchRejected,
+    fetchFiltered,
     fetchCoverage,
     fetchHealth,
+    checkSubs,
   } = useCuratorData();
 
   const importProps = useImport({ fetchNext, fetchStats });
@@ -76,14 +86,22 @@ export default function CuratorPage() {
     if (data) setIsStarred(data.isStarred || false);
   }, [data]);
 
-  // Fetch approved list when switching to approved tab
+  // Fetch approved list when switching to library tab
   useEffect(() => {
-    if (activeTab === "approved") fetchApproved();
+    if (activeTab === "library") fetchApproved();
   }, [activeTab, fetchApproved]);
 
-  // Reset to landing when switching to approved tab
+  // Fetch rejected + filtered when switching to rejected tab
   useEffect(() => {
-    if (activeTab === "approved") {
+    if (activeTab === "rejected") {
+      fetchRejected();
+      fetchFiltered();
+    }
+  }, [activeTab, fetchRejected, fetchFiltered]);
+
+  // Reset to landing when switching to library tab
+  useEffect(() => {
+    if (activeTab === "library") {
       setApprovedView({ mode: "landing" });
     }
   }, [activeTab]);
@@ -110,17 +128,14 @@ export default function CuratorPage() {
 
   const handleExitAudit = useCallback(() => {
     setApprovedView({ mode: "landing" });
-    fetchApproved(); // refresh counts
+    fetchApproved();
     fetchStats();
   }, [fetchApproved, fetchStats]);
 
   const handleStartQueue = useCallback(
     async (queueType: QueueType, channels: ApprovedChannel[]) => {
       if (queueType === "spot-check-rejected") {
-        // Lazy-fetch rejected channels
         await fetchRejected();
-        // We can't use rejectedChannels directly here since state won't have
-        // updated yet — fetch inline
         const res = await fetch("/api/curator?mode=rejected");
         const json = await res.json();
         const rejected = (json.channels || []) as ApprovedChannel[];
@@ -186,8 +201,54 @@ export default function CuratorPage() {
     [fetchNext, fetchStats]
   );
 
+  // Import new YouTube subscriptions
+  const handleImportSubscriptions = useCallback(async () => {
+    const res = await fetch("/api/curator/subscriptions", { method: "POST" });
+    const result = await res.json();
+    if (result.added > 0 || result.filtered > 0) {
+      setNewSubCount(0);
+      fetchNext();
+      fetchStats();
+    }
+  }, [fetchNext, fetchStats, setNewSubCount]);
+
+  // Rescue a filtered channel → move to review queue
+  const handleRescueFiltered = useCallback(
+    async (channelId: string, channelName: string) => {
+      await fetch("/api/curator", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rescueFiltered", channelId, channelName }),
+      });
+      fetchFiltered();
+      fetchNext();
+      fetchStats();
+    },
+    [fetchFiltered, fetchNext, fetchStats]
+  );
+
+  // Rescue a rejected channel → move to approved
+  const handleRescueRejected = useCallback(
+    async (channelId: string, channelName: string) => {
+      await fetch("/api/curator", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rescueChannel", channelId, channelName }),
+      });
+      fetchRejected();
+      fetchStats();
+    },
+    [fetchRejected, fetchStats]
+  );
+
+  // Refresh handler for empty state
+  const handleRefresh = useCallback(() => {
+    fetchNext();
+    fetchStats();
+    checkSubs();
+  }, [fetchNext, fetchStats, checkSubs]);
+
   // Only use keyboard shortcuts when NOT in queue mode
-  // (QueueAuditView manages its own shortcuts)
   const auditChannel =
     approvedView.mode === "direct-audit" ? approvedView.channel : null;
 
@@ -211,7 +272,7 @@ export default function CuratorPage() {
   // --- Render ---
 
   // Queue mode (full screen takeover)
-  if (activeTab === "approved" && approvedView.mode === "queue") {
+  if (activeTab === "library" && approvedView.mode === "queue") {
     return (
       <QueueAuditView
         queueType={approvedView.queueType}
@@ -229,8 +290,8 @@ export default function CuratorPage() {
     );
   }
 
-  // Direct audit mode (full screen takeover)
-  if (activeTab === "approved" && approvedView.mode === "direct-audit") {
+  // Direct audit mode (full screen takeover) — from library or rejected tab
+  if (approvedView.mode === "direct-audit") {
     return (
       <AuditMode
         channel={approvedView.channel}
@@ -269,26 +330,58 @@ export default function CuratorPage() {
               CURATOR
             </h1>
           </div>
-          {activeTab === "review" && data?.channel && (
-            <div className="text-right space-y-1">
-              <span className="text-[var(--text)] text-sm font-bold block tabular-nums">
-                {data.reviewed}
-                <span className="text-[var(--text-muted)] font-normal">
-                  {" "}
-                  / {data.total}
+          <div className="flex items-center gap-4">
+            <AuthButton />
+            {/* Gear icon */}
+            <button
+              onClick={() => setGearOpen((v) => !v)}
+              className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors text-lg"
+              title="Ops tools"
+            >
+              &#9881;
+            </button>
+            {activeTab === "review" && data?.channel && (
+              <div className="text-right space-y-1">
+                <span className="text-[var(--text)] text-sm font-bold block tabular-nums">
+                  {data.reviewed}
+                  <span className="text-[var(--text-muted)] font-normal">
+                    {" "}
+                    / {data.total}
+                  </span>
                 </span>
-              </span>
-              <span className="text-[var(--text-muted)] text-[11px] tracking-wide">
-                {data.approvedCount} approved &middot;{" "}
-                {data.starredCount || 0} starred &middot;{" "}
-                {data.unsubCount} unsub &middot; {data.remaining} left
-              </span>
-            </div>
-          )}
+                <span className="text-[var(--text-muted)] text-[11px] tracking-wide">
+                  {data.approvedCount} approved &middot;{" "}
+                  {data.starredCount || 0} starred &middot;{" "}
+                  {data.unsubCount} unsub &middot; {data.remaining} left
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
-        <CuratorStatsBar stats={stats} />
-        <CuratorTabBar activeTab={activeTab} onChange={setActiveTab} />
+        <CuratorStatsBar stats={stats} newSubCount={newSubCount} />
+        <CuratorTabBar
+          activeTab={activeTab}
+          onChange={setActiveTab}
+          pendingCount={stats?.pending}
+          rejectedCount={stats?.rejected}
+          filteredCount={filteredChannels.length}
+        />
+
+        {/* Sync Banner — shows in review tab when new subs detected */}
+        {activeTab === "review" && newSubCount > 0 && !data?.done && (
+          <div className="mb-4 flex items-center justify-between px-4 py-3 border border-[var(--text-secondary)]/30 bg-[var(--bg-alt)] rounded-lg">
+            <span className="text-sm text-[var(--text-secondary)]">
+              <span className="font-bold">{newSubCount}</span> new channel{newSubCount !== 1 ? "s" : ""} from your subscriptions
+            </span>
+            <button
+              onClick={handleImportSubscriptions}
+              className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider bg-[var(--text-secondary)] text-[var(--bg)] hover:opacity-80 transition-opacity rounded"
+            >
+              IMPORT
+            </button>
+          </div>
+        )}
 
         {/* Tab content */}
         {activeTab === "review" && (
@@ -300,8 +393,11 @@ export default function CuratorPage() {
                 skippedCount={data.skippedCount || 0}
                 onReviewSkipped={handleReviewSkipped}
                 onQuickImport={handleQuickImport}
+                onImportSubscriptions={handleImportSubscriptions}
                 importing={importProps.importing}
-                setActiveTab={setActiveTab}
+                onRefresh={handleRefresh}
+                newSubCount={newSubCount}
+                subCheckError={subCheckError}
               />
             ) : data?.channel ? (
               <ReviewQueue
@@ -322,28 +418,41 @@ export default function CuratorPage() {
           </>
         )}
 
-        {activeTab === "approved" && (
+        {activeTab === "library" && (
           <ApprovedBrowser
             channels={approvedChannels}
             loading={approvedLoading}
             onEnterAudit={handleEnterAudit}
             onStartQueue={handleStartQueue}
-            rejectedCount={stats?.rejected || 0}
           />
         )}
 
-        {activeTab === "ops" && (
-          <CuratorOps
-            fetchCoverage={fetchCoverage}
-            fetchHealth={fetchHealth}
-            fetchStats={fetchStats}
-            importProps={importProps}
-            skippedCount={stats?.skipped || 0}
-            onReviewSkipped={handleReviewSkipped}
-            setActiveTab={setActiveTab}
+        {activeTab === "rejected" && (
+          <RejectedBrowser
+            rejectedChannels={rejectedChannels}
+            filteredChannels={filteredChannels}
+            rejectedLoading={rejectedLoading}
+            filteredLoading={filteredLoading}
+            onRescueFiltered={handleRescueFiltered}
+            onRescueRejected={handleRescueRejected}
+            onStartQueue={handleStartQueue}
+            onEnterAudit={handleEnterAudit}
           />
         )}
       </div>
+
+      {/* Gear Menu overlay */}
+      <GearMenu
+        open={gearOpen}
+        onClose={() => setGearOpen(false)}
+        fetchCoverage={fetchCoverage}
+        fetchHealth={fetchHealth}
+        fetchStats={fetchStats}
+        importProps={importProps}
+        skippedCount={stats?.skipped || 0}
+        onReviewSkipped={handleReviewSkipped}
+        setActiveTab={setActiveTab}
+      />
     </div>
   );
 }

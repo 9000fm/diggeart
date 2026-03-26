@@ -6,11 +6,12 @@ import { useSession, signIn, signOut } from "next-auth/react";
 interface AuthButtonProps {
   onGoToSaved?: () => void;
   onOpenSettings?: () => void;
+  onOpenInfo?: () => void;
   /** Show extra items only available on mobile (Settings, About) */
   mobile?: boolean;
 }
 
-export default function AuthButton({ onGoToSaved, onOpenSettings, mobile = false }: AuthButtonProps) {
+export default function AuthButton({ onGoToSaved, onOpenSettings, onOpenInfo, mobile = false }: AuthButtonProps) {
   const { data: session, status } = useSession();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -55,18 +56,13 @@ export default function AuthButton({ onGoToSaved, onOpenSettings, mobile = false
 
     return (
       <div ref={ref} className="relative flex items-center gap-1">
-        <div className="relative group/avatar flex items-center gap-1">
+        <div className="relative group/avatar flex items-center">
           <button
             onClick={() => setOpen((v) => !v)}
-            className={`shrink-0 w-12 h-12 flex items-center justify-center rounded-xl cursor-pointer transition-all duration-200 hover:bg-[var(--bg-alt)] ${open ? "bg-[var(--bg-alt)]" : ""}`}
+            className={`shrink-0 flex items-center gap-0.5 h-12 px-2 rounded-xl cursor-pointer transition-all duration-200 hover:bg-[var(--bg-alt)] ${open ? "bg-[var(--bg-alt)]" : ""}`}
           >
             {avatar}
-          </button>
-          <button
-            onClick={() => setOpen((v) => !v)}
-            className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)] active:scale-90 transition-transform duration-100"
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+            <svg className="w-3.5 h-3.5 text-[var(--text-secondary)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
               <polyline points="6 9 12 15 18 9" />
             </svg>
           </button>
@@ -117,6 +113,19 @@ export default function AuthButton({ onGoToSaved, onOpenSettings, mobile = false
                   Settings
                 </button>
               )}
+              {mobile && onOpenInfo && (
+                <button
+                  onClick={() => { onOpenInfo(); setOpen(false); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 font-mono text-xs text-[var(--text-secondary)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)] transition-colors"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <circle cx="12" cy="8" r="0.5" fill="currentColor" />
+                  </svg>
+                  About
+                </button>
+              )}
             </div>
 
             {/* Sign out */}
@@ -142,20 +151,15 @@ export default function AuthButton({ onGoToSaved, onOpenSettings, mobile = false
   // ─── Logged-out state ───
   return (
     <div ref={ref} className="relative flex items-center gap-1">
-      <div className="relative group/avatar flex items-center gap-1">
+      <div className="relative group/avatar flex items-center">
         <button
           onClick={() => setOpen((v) => !v)}
-          className={`shrink-0 w-12 h-12 flex items-center justify-center rounded-xl text-[var(--text-secondary)] hover:text-[var(--text)] cursor-pointer transition-all duration-200 hover:bg-[var(--bg-alt)] ${open ? "bg-[var(--bg-alt)]" : ""}`}
+          className={`shrink-0 flex items-center gap-0.5 h-12 px-2 rounded-xl text-[var(--text-secondary)] hover:text-[var(--text)] cursor-pointer transition-all duration-200 hover:bg-[var(--bg-alt)] ${open ? "bg-[var(--bg-alt)]" : ""}`}
         >
           <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
             <circle cx="12" cy="7" r="4" />
           </svg>
-        </button>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-[var(--text-secondary)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)] active:scale-90 transition-transform duration-100"
-        >
           <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
             <polyline points="6 9 12 15 18 9" />
           </svg>
@@ -166,10 +170,10 @@ export default function AuthButton({ onGoToSaved, onOpenSettings, mobile = false
       </div>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-60 bg-[var(--bg)] border border-[var(--border)] rounded-xl shadow-2xl z-[70] py-3 px-4">
+        <div className="absolute right-0 top-full mt-2 w-60 bg-[var(--bg-alt)]/90 backdrop-blur-xl border border-[var(--border)]/50 rounded-xl shadow-2xl z-[70] py-3 px-4">
           <button
             onClick={() => { signIn("google"); setOpen(false); }}
-            className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 bg-[var(--text)] text-[var(--bg)] rounded-lg font-mono text-xs font-medium hover:opacity-90 transition-opacity"
+            className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 bg-[var(--border)]/50 hover:bg-[var(--border)] text-[var(--text)] rounded-lg font-mono text-xs font-medium transition-colors"
           >
             <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>

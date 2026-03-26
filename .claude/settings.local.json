@@ -14,7 +14,20 @@
       "WebFetch(domain:www.htmhell.dev)",
       "WebFetch(domain:frontendhack.com)",
       "WebFetch(domain:codepen.io)",
-      "Bash(cd E:\\\\WEB+DESIGN\\\\_ACTIVE\\\\digeart:*)"
+      "Bash(cd E:\\\\WEB+DESIGN\\\\_ACTIVE\\\\digeart:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(cd \"E:\\\\WEB+DESIGN\\\\_ACTIVE\\\\digeart\" && rm -f src/lib/supabase.ts src/components/SavedGrid.tsx && npm uninstall @supabase/supabase-js)",
+      "Bash(cd \"E:\\\\WEB+DESIGN\\\\_ACTIVE\\\\digeart\" && npx tsc --noEmit 2>&1 | head -40)",
+      "Bash(ls -la /e/WEB+DESIGN/_ACTIVE/digeart/*.js /e/WEB+DESIGN/_ACTIVE/digeart/*.ts)",
+      "Bash(npx tsc:*)",
+      "Bash(npx next:*)",
+      "Bash(npm run:*)",
+      "Bash(sed -n '/Keep handleYTStateChange/,/^\\\\s*\\\\], \\\\[/p')",
+      "Bash(sed -n '/Keep handleYTStateChange/,/^\\\\s*\\\\], \\\\[/p' src/app/page.tsx)",
+      "Bash(sed -n '/const createYTPlayer/,/eslint-disable/p')",
+      "Bash(sed -n '/const createYTPlayer/,/eslint-disable/p' src/app/page.tsx)",
+      "Bash(git add:*)"
     ]
   }
 }

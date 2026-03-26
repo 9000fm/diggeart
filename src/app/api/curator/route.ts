@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { getChannelUploads } from "@/lib/youtube";
+import { auth } from "@/auth";
 
 const DATA_DIR = path.join(process.cwd(), "src/data");
 const CHANNELS_PATH = path.join(DATA_DIR, "music-channels.json");
@@ -10,6 +11,7 @@ const REJECTED_PATH = path.join(DATA_DIR, "rejected-channels.json");
 const UNSUB_PATH = path.join(DATA_DIR, "unsubscribe-channels.json");
 const STARRED_PATH = path.join(DATA_DIR, "starred-channels.json");
 const SKIPPED_PATH = path.join(DATA_DIR, "skipped-channels.json");
+const FILTERED_PATH = path.join(DATA_DIR, "filtered-channels.json");
 const REGISTRY_PATH = path.join(DATA_DIR, "channel-registry.json");
 
 interface Channel {
@@ -31,6 +33,7 @@ interface RegistryEntry {
   name: string;
   importedAt: string;
   importSource: "subscription" | "paste" | "bookmarks";
+  autoFiltered?: boolean;
   reviewedAt: string | null;
   lastScannedAt: string | null;
   uploadsFetched: number;
@@ -205,11 +208,83 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Return rejected channels for spot-check queue
-  if (mode === "rejected") {
-    return NextResponse.json({
-      channels: rejected,
+  // Check for new subscriptions without importing
+  if (mode === "check-subs") {
+    let newCount = 0;
+    let error: string | undefined;
+    try {
+      const session = await auth();
+      const accessToken = (session as unknown as { accessToken?: string })?.accessToken;
+      if (accessToken) {
+        const existingIds = new Set(allChannels.map((c) => c.id));
+        let subPageToken: string | undefined;
+
+        do {
+          const url = new URL("https://www.googleapis.com/youtube/v3/subscriptions");
+          url.searchParams.set("part", "snippet");
+          url.searchParams.set("mine", "true");
+          url.searchParams.set("maxResults", "50");
+          if (subPageToken) url.searchParams.set("pageToken", subPageToken);
+
+          const res = await fetch(url.toString(), {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+
+          if (!res.ok) {
+            error = "Failed to fetch subscriptions";
+            break;
+          }
+
+          const data = await res.json();
+          for (const item of data.items || []) {
+            const chId = item.snippet?.resourceId?.channelId;
+            if (chId && !existingIds.has(chId)) {
+              newCount++;
+            }
+          }
+          subPageToken = data.nextPageToken;
+        } while (subPageToken);
+      } else {
+        error = "Not authenticated";
+      }
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Unknown error";
+    }
+    return NextResponse.json({ newCount, error });
+  }
+
+  // Return auto-filtered channels
+  if (mode === "filtered") {
+    const registry = readRegistry();
+    const filtered: { name: string; id: string; topics: string[] }[] = readJson(FILTERED_PATH);
+    const enriched = filtered.map((c) => ({
+      ...c,
+      importedAt: registry[c.id]?.importedAt || null,
+    }));
+    enriched.sort((a, b) => {
+      if (!a.importedAt && !b.importedAt) return 0;
+      if (!a.importedAt) return 1;
+      if (!b.importedAt) return -1;
+      return new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime();
     });
+    return NextResponse.json({ channels: enriched });
+  }
+
+  // Return rejected channels enriched with dates, sorted newest-first
+  if (mode === "rejected") {
+    const registry = readRegistry();
+    const enriched = rejected.map((c) => ({
+      ...c,
+      reviewedAt: registry[c.id]?.reviewedAt || null,
+      importedAt: registry[c.id]?.importedAt || null,
+    }));
+    enriched.sort((a, b) => {
+      if (!a.reviewedAt && !b.reviewedAt) return 0;
+      if (!a.reviewedAt) return 1;
+      if (!b.reviewedAt) return -1;
+      return new Date(b.reviewedAt).getTime() - new Date(a.reviewedAt).getTime();
+    });
+    return NextResponse.json({ channels: enriched });
   }
 
   // Return full approved list for the Approved Browser
@@ -291,6 +366,49 @@ export async function GET(req: NextRequest) {
   }
 
   if (available.length === 0) {
+    // Check for unimported YouTube subscriptions
+    let hasNewSubscriptions = false;
+    let newSubCount = 0;
+    try {
+      const session = await auth();
+      const accessToken = (session as unknown as { accessToken?: string })?.accessToken;
+      if (accessToken) {
+        const existingIds = new Set(allChannels.map((c) => c.id));
+        let pageToken: string | undefined;
+        const newSubs: string[] = [];
+
+        do {
+          const url = new URL("https://www.googleapis.com/youtube/v3/subscriptions");
+          url.searchParams.set("part", "snippet");
+          url.searchParams.set("mine", "true");
+          url.searchParams.set("maxResults", "50");
+          if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+          const res = await fetch(url.toString(), {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+
+          if (!res.ok) break;
+
+          const data = await res.json();
+          for (const item of data.items || []) {
+            const chId = item.snippet?.resourceId?.channelId;
+            if (chId && !existingIds.has(chId)) {
+              newSubs.push(chId);
+            }
+          }
+          pageToken = data.nextPageToken;
+        } while (pageToken);
+
+        if (newSubs.length > 0) {
+          hasNewSubscriptions = true;
+          newSubCount = newSubs.length;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to check subscriptions:", e);
+    }
+
     return NextResponse.json({
       done: true,
       reviewed,
@@ -303,6 +421,8 @@ export async function GET(req: NextRequest) {
       approvedChannels: approved,
       rejectedCount: rejected.length,
       unsubChannels: unsub,
+      hasNewSubscriptions,
+      newSubCount,
     });
   }
 
@@ -459,6 +579,29 @@ export async function PUT(req: NextRequest) {
         writeJson(UNSUB_PATH, unsub);
       }
     }
+
+    return NextResponse.json({ ok: true });
+  }
+
+  // Rescue a filtered channel → move to music-channels.json for review
+  if (body.action === "rescueFiltered" && body.channelId) {
+    const filtered: { name: string; id: string; topics: string[] }[] = readJson(FILTERED_PATH);
+    const idx = filtered.findIndex((c) => c.id === body.channelId);
+    let channelName = body.channelName || "";
+    if (idx !== -1) {
+      if (!channelName) channelName = filtered[idx].name;
+      filtered.splice(idx, 1);
+      writeJson(FILTERED_PATH, filtered);
+    }
+
+    const channels: Channel[] = readJson(CHANNELS_PATH);
+    if (!channels.some((c) => c.id === body.channelId)) {
+      channels.push({ name: channelName, id: body.channelId });
+      writeJson(CHANNELS_PATH, channels);
+    }
+
+    // Update registry
+    updateRegistry(body.channelId, { autoFiltered: false } as Partial<RegistryEntry>);
 
     return NextResponse.json({ ok: true });
   }

@@ -6,7 +6,7 @@
   --header-height: 68px;
   --header-height-mobile: 56px;
   --nav-height-mobile: 48px;
-  --player-height: 116px;
+  --player-height: 168px;
 
   /* Light theme (default) */
   --bg: #ffffff;
@@ -32,6 +32,10 @@
   --border: #27272a;
   --accent: #ffffff;
   --accent-text: #000000;
+}
+
+html {
+  overflow-x: hidden;
 }
 
 body {
@@ -73,10 +77,26 @@ body {
   scrollbar-color: var(--border) transparent;
 }
 
+/* Filter icon pulse on toggle */
+@keyframes filter-icon-pulse {
+  0%   { opacity: 1; }
+  30%  { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+.filter-icon-pulse {
+  animation: filter-icon-pulse 0.25s ease-out;
+}
+
 /* Locate button Y-axis spin */
 @keyframes locate-spin {
   0% { transform: rotateY(0deg); }
   100% { transform: rotateY(360deg); }
+}
+
+/* Onboarding step fade-in */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* Scrolling marquee banner */
@@ -124,75 +144,218 @@ body {
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
-/* EQ bars animation for card indicators */
+/* EQ bar base — GPU-accelerated via scaleY (no layout reflow) */
+.eq-bar-base {
+  height: 100%;
+  transform-origin: bottom;
+  will-change: transform;
+}
+
+/* Card EQ — gentle centered peak (20 stops) */
 @keyframes eq-bar {
-  0%, 100% { height: 15%; }
-  50% { height: 90%; }
+  0%   { transform: scaleY(0.12); }
+  5%   { transform: scaleY(0.18); }
+  10%  { transform: scaleY(0.28); }
+  15%  { transform: scaleY(0.42); }
+  20%  { transform: scaleY(0.58); }
+  25%  { transform: scaleY(0.72); }
+  30%  { transform: scaleY(0.83); }
+  35%  { transform: scaleY(0.90); }
+  40%  { transform: scaleY(0.92); }
+  45%  { transform: scaleY(0.88); }
+  50%  { transform: scaleY(0.78); }
+  55%  { transform: scaleY(0.65); }
+  60%  { transform: scaleY(0.50); }
+  65%  { transform: scaleY(0.38); }
+  70%  { transform: scaleY(0.28); }
+  75%  { transform: scaleY(0.22); }
+  80%  { transform: scaleY(0.20); }
+  85%  { transform: scaleY(0.22); }
+  90%  { transform: scaleY(0.20); }
+  95%  { transform: scaleY(0.16); }
+  100% { transform: scaleY(0.12); }
 }
 
 .eq-bar {
-  animation: eq-bar 0.8s ease-in-out infinite;
+  animation: eq-bar 2.7s ease-in-out infinite;
 }
 
 .eq-bar-idle {
-  height: 0 !important;
+  transform: scaleY(0) !important;
   animation: none !important;
 }
 
-/* 7 unique EQ keyframes for now-playing banner */
+/* 7 unique EQ keyframes — smooth 20-stop sine-wave scaleY */
 @keyframes eq-1 {
-  0%, 100% { height: 15%; }
-  40% { height: 85%; }
-  70% { height: 40%; }
+  0%   { transform: scaleY(0.10); }
+  5%   { transform: scaleY(0.22); }
+  10%  { transform: scaleY(0.42); }
+  15%  { transform: scaleY(0.65); }
+  20%  { transform: scaleY(0.82); }
+  25%  { transform: scaleY(0.92); }
+  30%  { transform: scaleY(0.95); }
+  35%  { transform: scaleY(0.90); }
+  40%  { transform: scaleY(0.82); }
+  45%  { transform: scaleY(0.72); }
+  50%  { transform: scaleY(0.60); }
+  55%  { transform: scaleY(0.48); }
+  60%  { transform: scaleY(0.38); }
+  65%  { transform: scaleY(0.30); }
+  70%  { transform: scaleY(0.24); }
+  75%  { transform: scaleY(0.20); }
+  80%  { transform: scaleY(0.18); }
+  85%  { transform: scaleY(0.16); }
+  90%  { transform: scaleY(0.14); }
+  95%  { transform: scaleY(0.12); }
+  100% { transform: scaleY(0.10); }
 }
 @keyframes eq-2 {
-  0%, 100% { height: 20%; }
-  50% { height: 95%; }
+  0%   { transform: scaleY(0.15); }
+  5%   { transform: scaleY(0.14); }
+  10%  { transform: scaleY(0.16); }
+  15%  { transform: scaleY(0.20); }
+  20%  { transform: scaleY(0.28); }
+  25%  { transform: scaleY(0.38); }
+  30%  { transform: scaleY(0.50); }
+  35%  { transform: scaleY(0.62); }
+  40%  { transform: scaleY(0.73); }
+  45%  { transform: scaleY(0.82); }
+  50%  { transform: scaleY(0.88); }
+  55%  { transform: scaleY(0.92); }
+  60%  { transform: scaleY(0.95); }
+  65%  { transform: scaleY(0.90); }
+  70%  { transform: scaleY(0.80); }
+  75%  { transform: scaleY(0.65); }
+  80%  { transform: scaleY(0.48); }
+  85%  { transform: scaleY(0.35); }
+  90%  { transform: scaleY(0.25); }
+  95%  { transform: scaleY(0.18); }
+  100% { transform: scaleY(0.15); }
 }
 @keyframes eq-3 {
-  0%, 100% { height: 30%; }
-  35% { height: 70%; }
-  65% { height: 90%; }
+  0%   { transform: scaleY(0.20); }
+  5%   { transform: scaleY(0.30); }
+  10%  { transform: scaleY(0.45); }
+  15%  { transform: scaleY(0.60); }
+  20%  { transform: scaleY(0.72); }
+  25%  { transform: scaleY(0.75); }
+  30%  { transform: scaleY(0.68); }
+  35%  { transform: scaleY(0.55); }
+  40%  { transform: scaleY(0.42); }
+  45%  { transform: scaleY(0.35); }
+  50%  { transform: scaleY(0.38); }
+  55%  { transform: scaleY(0.48); }
+  60%  { transform: scaleY(0.60); }
+  65%  { transform: scaleY(0.72); }
+  70%  { transform: scaleY(0.78); }
+  75%  { transform: scaleY(0.72); }
+  80%  { transform: scaleY(0.60); }
+  85%  { transform: scaleY(0.45); }
+  90%  { transform: scaleY(0.35); }
+  95%  { transform: scaleY(0.25); }
+  100% { transform: scaleY(0.20); }
 }
 @keyframes eq-4 {
-  0%, 100% { height: 10%; }
-  45% { height: 80%; }
-  80% { height: 50%; }
+  0%   { transform: scaleY(0.08); }
+  5%   { transform: scaleY(0.12); }
+  10%  { transform: scaleY(0.18); }
+  15%  { transform: scaleY(0.26); }
+  20%  { transform: scaleY(0.36); }
+  25%  { transform: scaleY(0.48); }
+  30%  { transform: scaleY(0.58); }
+  35%  { transform: scaleY(0.68); }
+  40%  { transform: scaleY(0.76); }
+  45%  { transform: scaleY(0.83); }
+  50%  { transform: scaleY(0.88); }
+  55%  { transform: scaleY(0.90); }
+  60%  { transform: scaleY(0.85); }
+  65%  { transform: scaleY(0.72); }
+  70%  { transform: scaleY(0.55); }
+  75%  { transform: scaleY(0.38); }
+  80%  { transform: scaleY(0.25); }
+  85%  { transform: scaleY(0.18); }
+  90%  { transform: scaleY(0.14); }
+  95%  { transform: scaleY(0.10); }
+  100% { transform: scaleY(0.08); }
 }
 @keyframes eq-5 {
-  0%, 100% { height: 25%; }
-  55% { height: 95%; }
-  75% { height: 35%; }
+  0%   { transform: scaleY(0.22); }
+  5%   { transform: scaleY(0.25); }
+  10%  { transform: scaleY(0.30); }
+  15%  { transform: scaleY(0.38); }
+  20%  { transform: scaleY(0.45); }
+  25%  { transform: scaleY(0.52); }
+  30%  { transform: scaleY(0.58); }
+  35%  { transform: scaleY(0.64); }
+  40%  { transform: scaleY(0.68); }
+  45%  { transform: scaleY(0.72); }
+  50%  { transform: scaleY(0.75); }
+  55%  { transform: scaleY(0.72); }
+  60%  { transform: scaleY(0.65); }
+  65%  { transform: scaleY(0.56); }
+  70%  { transform: scaleY(0.48); }
+  75%  { transform: scaleY(0.40); }
+  80%  { transform: scaleY(0.35); }
+  85%  { transform: scaleY(0.30); }
+  90%  { transform: scaleY(0.28); }
+  95%  { transform: scaleY(0.25); }
+  100% { transform: scaleY(0.22); }
 }
 @keyframes eq-6 {
-  0%, 100% { height: 18%; }
-  30% { height: 75%; }
-  60% { height: 90%; }
+  0%   { transform: scaleY(0.18); }
+  5%   { transform: scaleY(0.20); }
+  10%  { transform: scaleY(0.25); }
+  15%  { transform: scaleY(0.32); }
+  20%  { transform: scaleY(0.40); }
+  25%  { transform: scaleY(0.50); }
+  30%  { transform: scaleY(0.58); }
+  35%  { transform: scaleY(0.65); }
+  40%  { transform: scaleY(0.72); }
+  45%  { transform: scaleY(0.78); }
+  50%  { transform: scaleY(0.82); }
+  55%  { transform: scaleY(0.85); }
+  60%  { transform: scaleY(0.82); }
+  65%  { transform: scaleY(0.75); }
+  70%  { transform: scaleY(0.65); }
+  75%  { transform: scaleY(0.55); }
+  80%  { transform: scaleY(0.45); }
+  85%  { transform: scaleY(0.35); }
+  90%  { transform: scaleY(0.28); }
+  95%  { transform: scaleY(0.22); }
+  100% { transform: scaleY(0.18); }
 }
 @keyframes eq-7 {
-  0%, 100% { height: 22%; }
-  50% { height: 88%; }
-  80% { height: 30%; }
+  0%   { transform: scaleY(0.14); }
+  5%   { transform: scaleY(0.28); }
+  10%  { transform: scaleY(0.48); }
+  15%  { transform: scaleY(0.65); }
+  20%  { transform: scaleY(0.78); }
+  25%  { transform: scaleY(0.85); }
+  30%  { transform: scaleY(0.82); }
+  35%  { transform: scaleY(0.72); }
+  40%  { transform: scaleY(0.58); }
+  45%  { transform: scaleY(0.45); }
+  50%  { transform: scaleY(0.35); }
+  55%  { transform: scaleY(0.30); }
+  60%  { transform: scaleY(0.32); }
+  65%  { transform: scaleY(0.40); }
+  70%  { transform: scaleY(0.48); }
+  75%  { transform: scaleY(0.52); }
+  80%  { transform: scaleY(0.48); }
+  85%  { transform: scaleY(0.38); }
+  90%  { transform: scaleY(0.28); }
+  95%  { transform: scaleY(0.20); }
+  100% { transform: scaleY(0.14); }
 }
 
-.eq-bar-1 { animation: eq-1 0.8s ease-in-out infinite; }
-.eq-bar-2 { animation: eq-2 0.65s ease-in-out infinite; }
-.eq-bar-3 { animation: eq-3 1.0s ease-in-out infinite; }
-.eq-bar-4 { animation: eq-4 0.75s ease-in-out infinite; }
-.eq-bar-5 { animation: eq-5 0.55s ease-in-out infinite; }
+.eq-bar-1 { animation: eq-1 1.63s ease-in-out infinite; }
+.eq-bar-2 { animation: eq-2 2.14s ease-in-out infinite; }
+.eq-bar-3 { animation: eq-3 1.87s ease-in-out infinite; }
+.eq-bar-4 { animation: eq-4 2.43s ease-in-out infinite; }
+.eq-bar-5 { animation: eq-5 1.51s ease-in-out infinite; }
 
-.eq-bar-6 { animation: eq-6 0.9s ease-in-out infinite; }
-.eq-bar-7 { animation: eq-7 0.7s ease-in-out infinite; }
-
-/* Heart nudge animation */
-@keyframes nudge {
-  0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-3px); }
-  40%, 80% { transform: translateX(3px); }
-}
-.heart-nudge {
-  animation: nudge 0.3s ease-out;
-}
+.eq-bar-6 { animation: eq-6 1.78s ease-in-out infinite; }
+.eq-bar-7 { animation: eq-7 2.31s ease-in-out infinite; }
 
 /* Locate failed — shake the locate button */
 @keyframes locate-shake {
@@ -222,8 +385,11 @@ body {
 }
 
 /* Responsive player height */
-@media (min-width: 640px) {
-  :root { --player-height: 92px; }
+@media (min-width: 500px) {
+  :root { --player-height: 96px; }
+}
+@media (min-width: 1024px) {
+  :root { --player-height: 96px; }
 }
 
 /* Now-playing banner transitions (enter/exit handled by Framer Motion) */
@@ -370,6 +536,7 @@ body {
 .layout-shift[data-player="true"] {
   padding-bottom: var(--player-height);
 }
+/* At lg breakpoint the sidebar + player switch to desktop layout */
 @media (min-width: 1024px) {
   .layout-shift {
     padding-top: calc(var(--banner-height) + var(--header-height));
@@ -399,6 +566,7 @@ body {
   border-radius: 50%;
   background: var(--text);
 }
+
 .vinyl-spinner::after {
   content: "";
   position: absolute;
@@ -408,3 +576,46 @@ body {
   border-radius: 50%;
   background: var(--bg);
 }
+
+/* Vertical volume fader — popup style */
+.volume-fader {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  background: transparent !important;
+  cursor: pointer;
+}
+.volume-fader::-webkit-slider-runnable-track {
+  width: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-muted) 50%, var(--border));
+}
+.volume-fader::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--text);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.15);
+  margin-left: -5px;
+}
+.volume-fader::-moz-range-track {
+  width: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text-muted) 50%, var(--border));
+}
+.volume-fader::-moz-range-progress {
+  width: 4px;
+  border-radius: 2px;
+  background: var(--text);
+}
+.volume-fader::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--text);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.15);
+}
+

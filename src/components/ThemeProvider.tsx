@@ -34,8 +34,9 @@ export default function ThemeProvider({
     localStorage.setItem("digeart-theme", theme);
   }, [theme, mounted]);
 
-  const toggleTheme = () =>
+  const toggleTheme = () => {
     setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  };
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>

@@ -136,7 +136,7 @@ export function HealthIndicators({
                 ))}
               {ind.key === "noLabels" && (
                 <button
-                  onClick={() => setActiveTab("approved")}
+                  onClick={() => setActiveTab("library")}
                   className="text-[10px] text-amber-400 hover:underline uppercase tracking-wider"
                 >
                   Go to Approved &rarr; No Labels filter

@@ -18,6 +18,8 @@ export interface CuratorData {
   starredCount?: number;
   isStarred?: boolean;
   done?: boolean;
+  hasNewSubscriptions?: boolean;
+  newSubCount?: number;
   skippedCount?: number;
   starredChannels?: { name: string; id: string }[];
   approvedChannels?: { name: string; id: string; labels?: string[] }[];
@@ -51,9 +53,16 @@ export interface CuratorStats {
   noLabels?: number;
 }
 
-export type CuratorTab = "review" | "approved" | "ops";
+export type CuratorTab = "review" | "library" | "rejected";
 export type ApprovedFilter = "all" | "has-labels" | "no-labels" | "starred";
 export type QueueType = "tag-untagged" | "spot-check-rejected" | "re-audit-starred";
+
+export interface FilteredChannel {
+  name: string;
+  id: string;
+  topics: string[];
+  importedAt?: string | null;
+}
 
 export type ApprovedView =
   | { mode: "landing" }

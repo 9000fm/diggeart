@@ -54,15 +54,15 @@ export function useKeyboardShortcuts({
         return;
       }
       if (e.key === "2") {
-        setActiveTab("approved");
+        setActiveTab("library");
         return;
       }
       if (e.key === "3") {
-        setActiveTab("ops");
+        setActiveTab("rejected");
         return;
       }
 
-      // Audit mode shortcuts (approved tab)
+      // Audit mode shortcuts (library tab)
       if (auditChannel) {
         if (e.key === "l" || e.key === "L") handleSaveAuditLabels();
         if (e.key === "r" || e.key === "R")

@@ -9,7 +9,6 @@ interface ApprovedBrowserProps {
   loading: boolean;
   onEnterAudit: (ch: ApprovedChannel) => void;
   onStartQueue: (queueType: QueueType, channels: ApprovedChannel[]) => void;
-  rejectedCount: number;
 }
 
 export function ApprovedBrowser({
@@ -17,7 +16,6 @@ export function ApprovedBrowser({
   loading,
   onEnterAudit,
   onStartQueue,
-  rejectedCount,
 }: ApprovedBrowserProps) {
   const [search, setSearch] = useState("");
   const [genreFilter, setGenreFilter] = useState<string | null>(null);
@@ -70,7 +68,7 @@ export function ApprovedBrowser({
         <h3 className="text-[11px] text-[var(--text-muted)] uppercase tracking-[0.2em] mb-3">
           AUDIT QUEUES
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Tag Untagged */}
           <button
             onClick={() => onStartQueue("tag-untagged", untagged)}
@@ -89,28 +87,6 @@ export function ApprovedBrowser({
               </div>
               <p className="text-[10px] text-[var(--text-muted)] tracking-wide">
                 Listen and assign genre labels
-              </p>
-            </div>
-          </button>
-
-          {/* Spot-Check Rejected */}
-          <button
-            onClick={() => onStartQueue("spot-check-rejected", [])}
-            disabled={rejectedCount === 0}
-            className="group relative flex items-center rounded-none border border-[var(--border)] transition-all duration-100 hover:border-amber-500/50 active:scale-[0.98] disabled:opacity-30 disabled:pointer-events-none text-left"
-          >
-            <div className="w-1.5 self-stretch bg-amber-500 shrink-0" />
-            <div className="flex-1 px-4 py-3">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-amber-500 text-lg leading-none">
-                  &#9654;
-                </span>
-                <span className="text-sm font-bold uppercase tracking-wider text-[var(--text)] group-hover:text-amber-500 transition-colors">
-                  SPOT-CHECK {rejectedCount} REJECTED
-                </span>
-              </div>
-              <p className="text-[10px] text-[var(--text-muted)] tracking-wide">
-                Revisit rejected channels to catch mistakes
               </p>
             </div>
           </button>

@@ -6,8 +6,13 @@ import { AnimatePresence } from "framer-motion";
 import DiscoverGrid from "@/components/DiscoverGrid";
 import MixesGrid from "@/components/MixesGrid";
 import SamplesGrid from "@/components/SamplesGrid";
+import SavedGrid from "@/components/SavedGrid";
+import { supabase } from "@/lib/supabase";
 import NowPlayingBanner from "@/components/NowPlayingBanner";
 import Sidebar from "@/components/Sidebar";
+import UndoToast from "@/components/UndoToast";
+import OnboardingOverlay from "@/components/OnboardingOverlay";
+import WelcomeScreen from "@/components/WelcomeScreen";
 import type { ViewType } from "@/components/Sidebar";
 import type { CardData } from "@/lib/types";
 
@@ -35,42 +40,16 @@ interface YTPlayerEvent {
   data: number;
 }
 
-declare global {
-  interface Window {
-    YT: {
-      Player: new (
-        elementId: string | HTMLElement,
-        config: {
-          height?: string | number;
-          width?: string | number;
-          videoId?: string;
-          playerVars?: Record<string, unknown>;
-          events?: {
-            onReady?: (event: YTPlayerEvent) => void;
-            onStateChange?: (event: YTPlayerEvent) => void;
-            onError?: (event: YTPlayerEvent) => void;
-          };
-        }
-      ) => YTPlayer;
-      PlayerState: {
-        UNSTARTED: number;
-        ENDED: number;
-        PLAYING: number;
-        PAUSED: number;
-        BUFFERING: number;
-        CUED: number;
-      };
-    };
-    onYouTubeIframeAPIReady: () => void;
-  }
-}
+// YT types are declared in youtube-player.ts — use the local interfaces here
+// without re-declaring on Window (which conflicts with the `any` declaration)
 
 export default function Home() {
   const { data: session } = useSession();
   const isAuthenticated = !!session;
   const [activeView, setActiveView] = useState<ViewType>("home");
   const [activeGenre, setActiveGenre] = useState(0);
-  const [activeTagFilter, setActiveTagFilter] = useState<"all" | "top" | "hot" | "rare" | "new">("all");
+  const [activeTagFilter, setActiveTagFilter] = useState<"all" | "hot" | "rare" | "new">("all");
+  const [activeGenreLabel, setActiveGenreLabel] = useState<string | null>(null);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [nowPlayingCard, setNowPlayingCard] = useState<CardData | null>(null);
@@ -87,7 +66,21 @@ export default function Home() {
     return 80;
   });
   const [isMuted, setIsMuted] = useState(false);
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
+  const isMutedRef = useRef(isMuted);
+  isMutedRef.current = isMuted;
   const [skippingUnavailable, setSkippingUnavailable] = useState(false);
+  const [savedCards, setSavedCards] = useState<CardData[]>([]);
+  const [savedLoading, setSavedLoading] = useState(false);
+  const [softDeletedIds, setSoftDeletedIds] = useState<Set<string>>(new Set());
+  const [showAbout, setShowAbout] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Undo unlike state
+  const [undoToastVisible, setUndoToastVisible] = useState(false);
+  const pendingUnlike = useRef<{ id: string; card: CardData; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   const skippingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -102,10 +95,9 @@ export default function Home() {
   const ytPlayerRef = useRef<YTPlayer | null>(null);
   const ytContainerRef = useRef<HTMLDivElement | null>(null);
   const ytApiReady = useRef(false);
-  const ytProgressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const ytPendingVideoId = useRef<string | null>(null);
-
-
+  const ytProgressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasAdvancedRef = useRef(false);
 
   // ── Load YouTube IFrame API script ──
   useEffect(() => {
@@ -128,9 +120,76 @@ export default function Home() {
     document.head.appendChild(tag);
   }, []);
 
-  // ── YT progress poller ──
+  // ── Supabase: load saved likes on mount ──
+  useEffect(() => {
+    if (!session?.user?.email) return;
+    const email = session.user.email;
+    setSavedLoading(true);
+    supabase
+      .from("likes")
+      .select("video_id, card_data, deleted_at")
+      .eq("user_email", email)
+      .or("deleted_at.is.null,deleted_at.gte." + new Date(Date.now() - 30 * 86400000).toISOString())
+      .order("created_at", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Failed to load likes:", error);
+          setSavedLoading(false);
+          return;
+        }
+        const ids = new Set<string>();
+        const softDeleted = new Set<string>();
+        const cards: CardData[] = [];
+        for (const row of data || []) {
+          cards.push(row.card_data as CardData);
+          if (row.deleted_at === null) {
+            ids.add(row.video_id);
+          } else {
+            softDeleted.add(row.video_id);
+          }
+        }
+        setLikedIds(ids);
+        setSoftDeletedIds(softDeleted);
+        setSavedCards(cards);
+        setSavedLoading(false);
+      });
+  }, [session?.user?.email]);
+
+  // ── Onboarding: welcome (pre-login) + spotlight (post-login, first time) ──
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!localStorage.getItem("digeart-welcome-seen")) {
+      setShowWelcome(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (typeof window === "undefined") return;
+    // Mark welcome as seen once authenticated
+    localStorage.setItem("digeart-welcome-seen", "1");
+    setShowWelcome(false);
+    if (!localStorage.getItem("digeart-onboarded")) {
+      // Small delay so the UI has rendered
+      const timer = setTimeout(() => setShowOnboarding(true), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated]);
+
+  const handleOnboardingComplete = useCallback(() => {
+    setShowOnboarding(false);
+    localStorage.setItem("digeart-onboarded", "1");
+  }, []);
+
+  const handleWelcomeDismiss = useCallback(() => {
+    setShowWelcome(false);
+    localStorage.setItem("digeart-welcome-seen", "1");
+  }, []);
+
+  // ── YT progress poller (also handles background-tab end detection) ──
   const startYTProgressPoller = useCallback(() => {
     if (ytProgressInterval.current) clearInterval(ytProgressInterval.current);
+    hasAdvancedRef.current = false;
     ytProgressInterval.current = setInterval(() => {
       const p = ytPlayerRef.current;
       if (!p) return;
@@ -139,6 +198,14 @@ export default function Home() {
         const duration = p.getDuration();
         setAudioProgress(current);
         if (duration > 0) setAudioDuration(duration);
+        // End detection — catches track end even in background tabs
+        // where onStateChange(ENDED) is deferred
+        if (duration > 0 && current >= duration - 0.5 && !hasAdvancedRef.current) {
+          hasAdvancedRef.current = true;
+          clearInterval(ytProgressInterval.current!);
+          ytProgressInterval.current = null;
+          handleNextTrackRef.current?.();
+        }
       } catch {
         // player may not be ready
       }
@@ -164,13 +231,15 @@ export default function Home() {
   const createYTPlayer = useCallback((videoId: string) => {
     if (!ytApiReady.current || !ytContainerRef.current) return;
 
-    // Destroy existing player
+    // Reuse existing player — keeps the iframe + postMessage channel alive
     if (ytPlayerRef.current) {
-      try { ytPlayerRef.current.destroy(); } catch { /* ignore */ }
-      ytPlayerRef.current = null;
+      hasAdvancedRef.current = false;
+      ytPlayerRef.current.loadVideoById(videoId);
+      startYTProgressPoller();
+      return;
     }
 
-    // Create fresh div for player
+    // First time: create the player and iframe
     const div = document.createElement("div");
     div.id = "yt-player-target";
     ytContainerRef.current.innerHTML = "";
@@ -195,8 +264,8 @@ export default function Home() {
           event.target.mute();
           event.target.playVideo();
           setTimeout(() => {
-            event.target.setVolume(volume);
-            if (!isMuted) event.target.unMute();
+            event.target.setVolume(volumeRef.current);
+            if (!isMutedRef.current) event.target.unMute();
           }, 300);
           startYTProgressPoller();
         },
@@ -220,8 +289,9 @@ export default function Home() {
   // Keep handleYTStateChange in sync
   useEffect(() => {
     handleYTStateChange.current = (event: YTPlayerEvent) => {
-      if (event.data === 0) {
+      if (event.data === 0 && !hasAdvancedRef.current) {
         // ENDED
+        hasAdvancedRef.current = true;
         stopYTProgressPoller();
         handleNextTrackRef.current?.();
       } else if (event.data === 1) {
@@ -243,7 +313,10 @@ export default function Home() {
   const registerCards = useCallback((cards: CardData[], view: ViewType) => {
     for (const c of cards) {
       cardRegistry.current.set(c.id, c);
-      cardViewMap.current.set(c.id, view);
+      // Don't let the saved view overwrite a card's real origin
+      if (view !== "saved" || !cardViewMap.current.has(c.id)) {
+        cardViewMap.current.set(c.id, view);
+      }
     }
   }, []);
 
@@ -310,11 +383,12 @@ export default function Home() {
     }
   }, [createYTPlayer, stopYTProgressPoller]);
 
-  // Play random track
+  // Play random track — scoped to the current active view
   const playRandomTrack = useCallback(() => {
+    const currentView = activeViewRef.current;
     const entries = Array.from(cardRegistry.current.entries());
     const candidates = entries.filter(
-      ([id]) => id !== nowPlayingCardRef.current?.id
+      ([id]) => id !== nowPlayingCardRef.current?.id && cardViewMap.current.get(id) === currentView
     );
     if (candidates.length === 0) return;
     const [, card] = candidates[Math.floor(Math.random() * candidates.length)];
@@ -339,6 +413,10 @@ export default function Home() {
       return;
     }
     const nextIndex = (currentIndex + 1) % viewEntries.length;
+    if (nextIndex === currentIndex) {
+      // Only one track in view — stop instead of replaying
+      return;
+    }
     const [, nextCard] = viewEntries[nextIndex];
     handlePlayInternal(nextCard);
   }, [handlePlayInternal, playRandomTrack]);
@@ -414,14 +492,114 @@ export default function Home() {
     handlePlayInternal(card);
   }, [handlePlayInternal, handleTogglePlay]);
 
+  // Commit any pending unlike (soft-delete stays, just dismiss toast)
+  const commitPendingUnlike = useCallback(() => {
+    if (pendingUnlike.current) {
+      clearTimeout(pendingUnlike.current.timer);
+      pendingUnlike.current = null;
+      setUndoToastVisible(false);
+    }
+  }, []);
+
+  // Undo handler — restore the soft-deleted like
+  const handleUndoUnlike = useCallback(() => {
+    const pending = pendingUnlike.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingUnlike.current = null;
+    setUndoToastVisible(false);
+
+    // Restore in UI — card is still in grid, just remove from softDeletedIds
+    setLikedIds((prev) => new Set(prev).add(pending.id));
+    setSoftDeletedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(pending.id);
+      return next;
+    });
+
+    // Clear deleted_at in Supabase (restore the row)
+    const email = session?.user?.email;
+    if (email) {
+      supabase
+        .from("likes")
+        .update({ deleted_at: null })
+        .eq("user_email", email)
+        .eq("video_id", pending.id)
+        .then(({ error }) => {
+          if (error) console.error("Failed to restore like:", error);
+        });
+    }
+  }, [session?.user?.email]);
+
   const toggleLike = useCallback((id: string) => {
+    const wasLiked = likedIds.has(id);
+    const wasSoftDeleted = softDeletedIds.has(id);
+    const card = cardRegistry.current.get(id)
+      || savedCards.find((c) => c.id === id);
+
+    // Optimistic local update
     setLikedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
+      if (wasLiked) next.delete(id);
       else next.add(id);
       return next;
     });
-  }, []);
+
+    if (wasLiked) {
+      // Card stays in grid — just add to softDeletedIds
+      setSoftDeletedIds((prev) => new Set(prev).add(id));
+    } else {
+      // Re-liking a grace-period card — remove from softDeletedIds
+      if (wasSoftDeleted) {
+        setSoftDeletedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      } else if (card) {
+        // Fresh like — prepend to savedCards
+        setSavedCards((prev) => [card, ...prev]);
+      }
+    }
+
+    // Background Supabase sync
+    const email = session?.user?.email;
+    if (!email || !card) return;
+
+    if (wasLiked) {
+      // Commit any previous pending unlike first
+      commitPendingUnlike();
+
+      // Soft-delete: set deleted_at instead of DELETE
+      supabase
+        .from("likes")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("user_email", email)
+        .eq("video_id", id)
+        .then(({ error }) => {
+          if (error) console.error("Failed to soft-delete like:", error);
+        });
+
+      // Show undo toast with 5s window
+      const timer = setTimeout(() => {
+        pendingUnlike.current = null;
+        setUndoToastVisible(false);
+      }, 5000);
+      pendingUnlike.current = { id, card, timer };
+      setUndoToastVisible(true);
+    } else {
+      // Liking — upsert with deleted_at cleared (handles re-liking a soft-deleted row)
+      supabase
+        .from("likes")
+        .upsert(
+          { user_email: email, video_id: id, card_data: card, deleted_at: null },
+          { onConflict: "user_email,video_id" }
+        )
+        .then(({ error }) => {
+          if (error) console.error("Failed to upsert like:", error);
+        });
+    }
+  }, [likedIds, softDeletedIds, session?.user?.email, commitPendingUnlike, savedCards]);
 
   const handleClosePlayer = useCallback(() => {
     stopYTProgressPoller();
@@ -446,6 +624,7 @@ export default function Home() {
   // Locate card — with 3s poll (30 × 100ms) + failure feedback
   const handleLocateCard = useCallback(() => {
     if (!nowPlayingCard) return;
+    document.dispatchEvent(new Event("locate-triggered"));
 
     const tryScroll = () => {
       const els = document.querySelectorAll(`[data-card-id="${nowPlayingCard.id}"]`);
@@ -477,23 +656,36 @@ export default function Home() {
 
     if (tryScroll()) return;
 
-    // Use the view where the card was played from, falling back to cardViewMap
-    const originView = playOriginView.current || cardViewMap.current.get(nowPlayingCard.id);
-    if (originView && originView !== activeView) {
-      setActiveView(originView);
-      let attempts = 0;
-      const poll = setInterval(() => {
-        attempts++;
-        if (tryScroll()) {
-          clearInterval(poll);
-        } else if (attempts > 30) {
-          clearInterval(poll);
-          // Card not found after 3s — give visual feedback
+    const originView = playOriginView.current;
+    const mapView = cardViewMap.current.get(nowPlayingCard.id);
+
+    // Build list of views to try (deduped, excluding current)
+    const viewsToTry: ViewType[] = [];
+    if (originView && originView !== activeView) viewsToTry.push(originView);
+    if (mapView && mapView !== activeView && mapView !== originView) viewsToTry.push(mapView);
+
+    if (viewsToTry.length > 0) {
+      let viewIdx = 0;
+      const tryNextView = () => {
+        if (viewIdx >= viewsToTry.length) {
           pulseLocateBtn();
+          return;
         }
-      }, 100);
+        setActiveView(viewsToTry[viewIdx]);
+        let attempts = 0;
+        const poll = setInterval(() => {
+          attempts++;
+          if (tryScroll()) {
+            clearInterval(poll);
+          } else if (attempts > 30) {
+            clearInterval(poll);
+            viewIdx++;
+            tryNextView();
+          }
+        }, 100);
+      };
+      tryNextView();
     } else {
-      // Same view but card not in DOM — give feedback
       pulseLocateBtn();
     }
   }, [nowPlayingCard, activeView]);
@@ -566,6 +758,14 @@ export default function Home() {
           e.preventDefault();
           if (nowPlayingCard && historyLength > 0) handlePrevTrack();
           break;
+        case "n":
+        case "N":
+          if (nowPlayingCard) handleNextTrack();
+          break;
+        case "p":
+        case "P":
+          if (nowPlayingCard && historyLength > 0) handlePrevTrack();
+          break;
         case "s":
         case "S":
           if (nowPlayingCard) handleToggleAutoPlay();
@@ -574,14 +774,45 @@ export default function Home() {
         case "M":
           if (nowPlayingCard) handleToggleMute();
           break;
-        case "Escape":
-          if (nowPlayingCard) handleClosePlayerRef.current();
+        case "l":
+        case "L":
+          if (nowPlayingCard) handleLocateCard();
+          break;
+        case "f":
+        case "F":
+          if (document.fullscreenElement) {
+            document.exitFullscreen();
+          } else {
+            document.documentElement.requestFullscreen();
+          }
+          break;
+        case "1":
+          handleViewChange("home");
+          break;
+        case "2":
+          handleViewChange("samples");
+          break;
+        case "3":
+          handleViewChange("mixes");
+          break;
+        case "4":
+          handleViewChange("saved");
+          break;
+        case "?":
+          setShowAbout((v) => !v);
+          break;
+        case "+":
+        case "=":
+          if (nowPlayingCard) handleVolumeChange(Math.min(100, volume + 5));
+          break;
+        case "-":
+          if (nowPlayingCard) handleVolumeChange(Math.max(0, volume - 5));
           break;
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [nowPlayingCard, handleTogglePlay, handleNextTrack, handlePrevTrack, handleToggleAutoPlay, historyLength, handleToggleMute]);
+  }, [nowPlayingCard, handleTogglePlay, handleNextTrack, handlePrevTrack, handleToggleAutoPlay, historyLength, handleToggleMute, handleLocateCard, handleViewChange, volume, handleVolumeChange]);
 
   const hasPlayer = !!nowPlayingCard;
 
@@ -604,6 +835,11 @@ export default function Home() {
         onGenreChange={setActiveGenre}
         activeTagFilter={activeTagFilter}
         onTagFilterChange={setActiveTagFilter}
+        activeGenreLabel={activeGenreLabel}
+        onGenreLabelChange={setActiveGenreLabel}
+        showAbout={showAbout}
+        onToggleAbout={() => setShowAbout((v) => !v)}
+        onRunTutorial={() => { setShowAbout(false); setShowOnboarding(true); }}
       />
 
       <div style={{ display: activeView === "home" ? undefined : "none" }}>
@@ -617,6 +853,7 @@ export default function Home() {
           onToggleLike={toggleLike}
           activeGenre={activeGenre}
           activeTagFilter={activeTagFilter}
+          activeGenreLabel={activeGenreLabel}
           onCardsLoaded={registerHomeCards}
           isAuthenticated={isAuthenticated}
         />
@@ -632,6 +869,7 @@ export default function Home() {
           onToggleSave={toggleLike}
           onToggleLike={toggleLike}
           activeTagFilter={activeTagFilter}
+          activeGenreLabel={activeGenreLabel}
           onCardsLoaded={registerSamplesCards}
           isAuthenticated={isAuthenticated}
         />
@@ -647,27 +885,30 @@ export default function Home() {
           onToggleSave={toggleLike}
           onToggleLike={toggleLike}
           activeTagFilter={activeTagFilter}
+          activeGenreLabel={activeGenreLabel}
           onCardsLoaded={registerMixesCards}
           isAuthenticated={isAuthenticated}
         />
       </div>
 
       <div style={{ display: activeView === "saved" ? undefined : "none" }}>
-        <DiscoverGrid
-          showSavedOnly
-          savedIds={likedIds}
+        <SavedGrid
+          cards={savedCards}
+          loading={savedLoading}
           likedIds={likedIds}
+          softDeletedIds={softDeletedIds}
           playingId={playingId}
           isPlaying={isPlaying}
           onPlay={handlePlay}
-          onToggleSave={toggleLike}
           onToggleLike={toggleLike}
-          activeGenre={activeGenre}
           activeTagFilter={activeTagFilter}
-          onCardsLoaded={registerSavedCards}
           isAuthenticated={isAuthenticated}
+          onCardsLoaded={registerSavedCards}
         />
       </div>
+
+      <UndoToast visible={undoToastVisible} onUndo={handleUndoUnlike} />
+
 
       <AnimatePresence>
         {nowPlayingCard && (
@@ -697,6 +938,9 @@ export default function Home() {
           />
         )}
       </AnimatePresence>
+
+      <WelcomeScreen show={showWelcome} onDismiss={handleWelcomeDismiss} />
+      <OnboardingOverlay show={showOnboarding} onComplete={handleOnboardingComplete} onPlayRandom={playRandomTrack} />
     </main>
   );
 }

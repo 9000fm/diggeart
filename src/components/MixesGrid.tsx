@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import MusicCard from "./MusicCard";
 import type { TagFilter } from "./Sidebar";
 import type { CardData } from "@/lib/types";
@@ -14,6 +14,7 @@ interface MixesGridProps {
   onToggleSave: (id: string) => void;
   onToggleLike: (id: string) => void;
   activeTagFilter?: TagFilter;
+  activeGenreLabel?: string | null;
   onCardsLoaded?: (cards: CardData[]) => void;
   isAuthenticated?: boolean;
 }
@@ -27,6 +28,7 @@ export default function MixesGrid({
   onToggleSave,
   onToggleLike,
   activeTagFilter = "all",
+  activeGenreLabel = null,
   onCardsLoaded,
   isAuthenticated = true,
 }: MixesGridProps) {
@@ -38,7 +40,7 @@ export default function MixesGrid({
   const hasMore = useRef(true);
 
   const fetchMixes = useCallback(
-    async (append = false, sort?: string) => {
+    async (tag: TagFilter, genreLabel: string | null, append = false) => {
       if (append && !hasMore.current) return;
       if (append) setLoadingMore(true);
       else { setLoading(true); hasMore.current = true; }
@@ -46,14 +48,14 @@ export default function MixesGrid({
       try {
         const limit = 20;
         const offset = append ? pageRef.current * limit : 0;
-        let url = `/api/mixes?limit=${limit}&offset=${offset}`;
-        if (sort) url += `&sort=${sort}`;
+        let url = `/api/mixes?limit=${limit}&offset=${offset}&tag=${tag}`;
+        if (genreLabel) url += `&genre=${encodeURIComponent(genreLabel)}`;
         const res = await fetch(url);
         const data = await res.json();
         const newCards: CardData[] = data.cards || [];
         onCardsLoaded?.(newCards);
 
-        if (newCards.length < limit) hasMore.current = false;
+        hasMore.current = data.hasMore === true;
 
         if (append) {
           setCards((prev) => {
@@ -76,18 +78,19 @@ export default function MixesGrid({
     [] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+  // Refetch on ANY tag or genre label change
   const prevTagRef = useRef(activeTagFilter);
+  const prevGenreLabelRef = useRef(activeGenreLabel);
   useEffect(() => {
-    const wasTop = prevTagRef.current === "top";
-    const isTop = activeTagFilter === "top";
-    prevTagRef.current = activeTagFilter;
-    if (wasTop !== isTop) {
-      fetchMixes(false, isTop ? "top" : undefined);
+    if (prevTagRef.current !== activeTagFilter || prevGenreLabelRef.current !== activeGenreLabel) {
+      prevTagRef.current = activeTagFilter;
+      prevGenreLabelRef.current = activeGenreLabel;
+      fetchMixes(activeTagFilter, activeGenreLabel);
     }
-  }, [activeTagFilter, fetchMixes]);
+  }, [activeTagFilter, activeGenreLabel, fetchMixes]);
 
   useEffect(() => {
-    fetchMixes(false, activeTagFilter === "top" ? "top" : undefined);
+    fetchMixes(activeTagFilter, activeGenreLabel);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -99,7 +102,7 @@ export default function MixesGrid({
           !loadingMore &&
           cards.length > 0
         ) {
-          fetchMixes(true, activeTagFilter === "top" ? "top" : undefined);
+          fetchMixes(activeTagFilter, activeGenreLabel, true);
         }
       },
       { rootMargin: "400px" }
@@ -110,7 +113,7 @@ export default function MixesGrid({
     return () => {
       if (el) observer.unobserve(el);
     };
-  }, [activeTagFilter, loading, loadingMore, cards.length, fetchMixes]);
+  }, [activeTagFilter, activeGenreLabel, loading, loadingMore, cards.length, fetchMixes]);
 
   const shareCard = async (card: CardData) => {
     const url = card.youtubeUrl || "";
@@ -124,27 +127,9 @@ export default function MixesGrid({
     }
   };
 
-  const top10Ids = useMemo(() => {
-    const sorted = [...cards]
-      .filter((c) => c.viewCount != null && c.viewCount > 0)
-      .sort((a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0));
-    return new Set(sorted.slice(0, 10).map((c) => c.id));
-  }, [cards]);
-
-  const displayCards = useMemo(() => {
-    if (activeTagFilter === "all") return cards;
-    if (activeTagFilter === "top") return cards; // server already sorted by viewCount
-    return cards.filter((card) => {
-      if (activeTagFilter === "hot") return card.viewCount != null && card.viewCount >= 100_000;
-      if (activeTagFilter === "rare") return card.viewCount != null && card.viewCount < 5_000;
-      if (activeTagFilter === "new") return card.publishedAt && (Date.now() - new Date(card.publishedAt).getTime()) / 86400000 <= 30;
-      return true;
-    });
-  }, [cards, activeTagFilter, top10Ids]);
-
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-[11px] p-2 sm:p-[11px]">
+      <div className="dot-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-[11px] p-2 sm:p-[11px]">
         {Array.from({ length: 10 }).map((_, i) => (
           <div
             key={i}
@@ -173,14 +158,15 @@ export default function MixesGrid({
 
   return (
     <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-[11px] p-2 sm:p-[11px]">
-        {displayCards.map((card) => (
+      <div className="dot-grid grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-[11px] p-2 sm:p-[11px]">
+        {cards.map((card) => (
           <MusicCard
             key={card.id}
             card={card}
             saved={likedIds.has(card.id)}
             isPlaying={playingId === card.id && isPlaying}
-            isTop10={top10Ids.has(card.id)}
+            activeTagFilter={activeTagFilter}
+            viewContext="mixes"
             onPlay={() => onPlay(card.id)}
             onSave={() => onToggleLike(card.id)}
             onShare={() => shareCard(card)}

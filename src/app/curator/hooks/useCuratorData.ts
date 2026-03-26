@@ -5,6 +5,7 @@ import type {
   ApprovedChannel,
   CoverageData,
   HealthData,
+  FilteredChannel,
 } from "../types";
 
 export function useCuratorData() {
@@ -16,9 +17,16 @@ export function useCuratorData() {
   );
   const [approvedLoading, setApprovedLoading] = useState(false);
   const [rejectedChannels, setRejectedChannels] = useState<
-    { name: string; id: string }[]
+    { name: string; id: string; reviewedAt?: string | null; importedAt?: string | null }[]
   >([]);
   const [rejectedLoading, setRejectedLoading] = useState(false);
+  const [filteredChannels, setFilteredChannels] = useState<FilteredChannel[]>([]);
+  const [filteredLoading, setFilteredLoading] = useState(false);
+
+  // Subscription check state
+  const [newSubCount, setNewSubCount] = useState(0);
+  const [subCheckError, setSubCheckError] = useState<string | undefined>();
+  const [subChecking, setSubChecking] = useState(false);
 
   const fetchNext = useCallback(async () => {
     setLoading(true);
@@ -51,6 +59,14 @@ export function useCuratorData() {
     setRejectedLoading(false);
   }, []);
 
+  const fetchFiltered = useCallback(async () => {
+    setFilteredLoading(true);
+    const res = await fetch("/api/curator?mode=filtered");
+    const json = await res.json();
+    setFilteredChannels(json.channels || []);
+    setFilteredLoading(false);
+  }, []);
+
   const fetchCoverage = useCallback(async (): Promise<CoverageData> => {
     const res = await fetch("/api/curator?mode=coverage");
     return res.json();
@@ -61,10 +77,25 @@ export function useCuratorData() {
     return res.json();
   }, []);
 
+  const checkSubs = useCallback(async () => {
+    setSubChecking(true);
+    setSubCheckError(undefined);
+    try {
+      const res = await fetch("/api/curator?mode=check-subs");
+      const json = await res.json();
+      setNewSubCount(json.newCount || 0);
+      if (json.error) setSubCheckError(json.error);
+    } catch (e) {
+      setSubCheckError(e instanceof Error ? e.message : "Check failed");
+    }
+    setSubChecking(false);
+  }, []);
+
   useEffect(() => {
     fetchNext();
     fetchStats();
-  }, [fetchNext, fetchStats]);
+    checkSubs();
+  }, [fetchNext, fetchStats, checkSubs]);
 
   return {
     data,
@@ -76,11 +107,19 @@ export function useCuratorData() {
     approvedLoading,
     rejectedChannels,
     rejectedLoading,
+    filteredChannels,
+    filteredLoading,
+    newSubCount,
+    setNewSubCount,
+    subCheckError,
+    subChecking,
     fetchNext,
     fetchStats,
     fetchApproved,
     fetchRejected,
+    fetchFiltered,
     fetchCoverage,
     fetchHealth,
+    checkSubs,
   };
 }

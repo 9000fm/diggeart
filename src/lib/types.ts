@@ -18,4 +18,5 @@ export interface CardData {
   duration: number | null;
   viewCount: number | null;
   publishedAt: string | null;
+  description: string | null;
 }

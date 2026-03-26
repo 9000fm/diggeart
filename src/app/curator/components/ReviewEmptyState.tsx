@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { CuratorTab } from "../types";
 
 interface ReviewEmptyStateProps {
   approvedCount: number;
@@ -9,8 +8,11 @@ interface ReviewEmptyStateProps {
   skippedCount: number;
   onReviewSkipped: () => void;
   onQuickImport: (url: string) => void;
+  onImportSubscriptions: () => Promise<void>;
   importing: boolean;
-  setActiveTab: (tab: CuratorTab) => void;
+  onRefresh: () => void;
+  newSubCount: number;
+  subCheckError?: string;
 }
 
 export function ReviewEmptyState({
@@ -19,10 +21,14 @@ export function ReviewEmptyState({
   skippedCount,
   onReviewSkipped,
   onQuickImport,
+  onImportSubscriptions,
   importing,
-  setActiveTab,
+  onRefresh,
+  newSubCount,
+  subCheckError,
 }: ReviewEmptyStateProps) {
   const [quickUrl, setQuickUrl] = useState("");
+  const [importingSubs, setImportingSubs] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +38,12 @@ export function ReviewEmptyState({
     }
   };
 
+  const handleImportSubs = async () => {
+    setImportingSubs(true);
+    await onImportSubscriptions();
+    setImportingSubs(false);
+  };
+
   return (
     <div className="max-w-lg mx-auto py-16 space-y-6 text-center">
       <div>
@@ -39,6 +51,36 @@ export function ReviewEmptyState({
         <p className="text-sm text-[var(--text-muted)] mt-1">
           {approvedCount} approved &middot; {total} total
         </p>
+      </div>
+
+      {/* Sync subscriptions — always visible */}
+      <div className="space-y-3">
+        {subCheckError ? (
+          <p className="text-sm text-red-400">
+            Sync failed &mdash; try signing out and back in
+          </p>
+        ) : newSubCount > 0 ? (
+          <>
+            <p className="text-sm text-[var(--text-secondary)]">
+              Found <span className="font-bold">{newSubCount}</span> new channel{newSubCount !== 1 ? "s" : ""} from your subscriptions
+            </p>
+            <button
+              onClick={handleImportSubs}
+              disabled={importingSubs}
+              className="px-6 py-2.5 text-sm font-bold uppercase tracking-[0.15em] bg-[var(--text-secondary)] text-[var(--bg)] hover:opacity-80 transition-opacity rounded-lg disabled:opacity-40"
+            >
+              {importingSubs ? "IMPORTING..." : `IMPORT ${newSubCount} CHANNEL${newSubCount !== 1 ? "S" : ""}`}
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={handleImportSubs}
+            disabled={importingSubs}
+            className="px-6 py-2.5 text-sm font-bold uppercase tracking-[0.15em] bg-[var(--bg-alt)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:border-[var(--text-secondary)] transition-all rounded-lg disabled:opacity-40"
+          >
+            {importingSubs ? "SYNCING..." : "SYNC SUBSCRIPTIONS"}
+          </button>
+        )}
       </div>
 
       {skippedCount > 0 && (
@@ -71,11 +113,12 @@ export function ReviewEmptyState({
         </button>
       </form>
 
+      {/* Refresh */}
       <button
-        onClick={() => setActiveTab("ops")}
+        onClick={onRefresh}
         className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text)] uppercase tracking-[0.2em] transition-colors"
       >
-        Full dashboard &rarr; OPS tab
+        Refresh
       </button>
     </div>
   );

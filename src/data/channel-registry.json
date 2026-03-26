@@ -5,7 +5,7 @@
     "importedAt": "2026-02-25T00:00:00Z",
     "importSource": "subscription",
     "reviewedAt": "2026-02-25T00:00:00Z",
-    "lastScannedAt": "2026-02-25T09:57:29.169Z",
+    "lastScannedAt": "2026-03-11T22:26:28.165Z",
     "uploadsFetched": 20,
     "scanError": null
   },
@@ -15,8 +15,8 @@
     "importedAt": "2026-02-25T00:00:00Z",
     "importSource": "subscription",
     "reviewedAt": "2026-02-25T00:00:00Z",
-    "lastScannedAt": null,
-    "uploadsFetched": 0,
+    "lastScannedAt": "2026-03-13T19:17:36.292Z",
+    "uploadsFetched": 32,
     "scanError": null
   },
   "UC0MbImAZ5VBy0CKANa17Rrg": {
@@ -85,8 +85,8 @@
     "importedAt": "2026-02-25T00:00:00Z",
     "importSource": "subscription",
     "reviewedAt": "2026-02-25T00:00:00Z",
-    "lastScannedAt": null,
-    "uploadsFetched": 0,
+    "lastScannedAt": "2026-03-17T15:50:41.295Z",
+    "uploadsFetched": 50,
     "scanError": null
   },
   "UCwS_EHjafevNbFx9DlkSNBw": {
@@ -3325,8 +3325,8 @@
     "importedAt": "2026-02-25T00:00:00Z",
     "importSource": "subscription",
     "reviewedAt": "2026-02-25T00:00:00Z",
-    "lastScannedAt": null,
-    "uploadsFetched": 0,
+    "lastScannedAt": "2026-03-13T19:17:34.806Z",
+    "uploadsFetched": 50,
     "scanError": null
   },
   "UC7RXIF7lok7pTUaC4p7eeXw": {
@@ -4305,8 +4305,8 @@
     "importedAt": "2026-02-25T00:00:00Z",
     "importSource": "subscription",
     "reviewedAt": "2026-02-25T00:00:00Z",
-    "lastScannedAt": null,
-    "uploadsFetched": 0,
+    "lastScannedAt": "2026-03-24T16:24:39.878Z",
+    "uploadsFetched": 50,
     "scanError": null
   },
   "UCnJ3NIEju6riVXic-Affgsg": {
@@ -4367,6 +4367,16 @@
     "reviewedAt": "2026-02-25T00:00:00Z",
     "lastScannedAt": null,
     "uploadsFetched": 0,
+    "scanError": null
+  },
+  "UCkwMB8s8J0YbJJVnQel2sZw": {
+    "id": "UCkwMB8s8J0YbJJVnQel2sZw",
+    "name": "77DD",
+    "importedAt": "2026-03-13T17:38:31.088Z",
+    "importSource": "paste",
+    "reviewedAt": "2026-03-13T17:57:57.610Z",
+    "lastScannedAt": "2026-03-13T18:52:54.214Z",
+    "uploadsFetched": 4,
     "scanError": null
   }
 }
