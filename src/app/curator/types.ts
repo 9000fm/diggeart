@@ -82,6 +82,7 @@ export const GENRE_LABELS = [
   "Jazz",
   "Reggae",
   "Pop",
+  "Indie / Rock",
   "World",
   "Experimental",
   "IDM",

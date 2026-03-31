@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import type { CuratorTab, ApprovedChannel, ApprovedView } from "./types";
 import { useCuratorData } from "./hooks/useCuratorData";
@@ -34,11 +34,13 @@ function CuratorAuthGate() {
     );
   }
 
-  if (!session) {
+  if (!session || (session as unknown as { error?: string }).error === "RefreshAccessTokenError") {
     return (
       <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] font-mono flex flex-col items-center justify-center gap-6">
         <h1 className="text-3xl font-bold uppercase tracking-[0.25em] text-[var(--text-secondary)]">CURATOR</h1>
-        <p className="text-[var(--text-muted)] text-sm">Sign in to access the curator dashboard</p>
+        <p className="text-[var(--text-muted)] text-sm">
+          {(session as unknown as { error?: string })?.error ? "Session expired — please sign in again" : "Sign in to access the curator dashboard"}
+        </p>
         <AuthButton />
         <a href="/" className="text-[var(--text-muted)] hover:text-[var(--text)] text-xs uppercase tracking-wider transition-colors mt-4">
           &larr; Back to digeart
@@ -71,56 +73,104 @@ function CuratorDashboard() {
   const reviewListRef = useRef<ReviewChannel[]>([]);
 
   const {
-    data, setData, loading, stats,
+    data, setData, stats,
     approvedChannels, setApprovedChannels, approvedLoading,
     rejectedChannels, rejectedLoading,
     filteredChannels, filteredLoading,
     pendingChannels, pendingLoading,
-    newSubCount, setNewSubCount, subCheckError,
-    fetchNext, fetchStats, fetchApproved, fetchRejected, fetchFiltered, fetchPending, checkSubs,
+    setNewSubCount,
+    fetchStats, fetchApproved, fetchRejected, fetchFiltered, fetchPending,
   } = useCuratorData();
 
   // Build unified review list: pending (unreviewed from music-channels) + filtered (auto-filtered)
-  const reviewChannels: ReviewChannel[] = [
+  const reviewChannels = useMemo<ReviewChannel[]>(() => [
     ...pendingChannels.map((c) => ({ ...c, origin: undefined })),
     ...filteredChannels.map((c) => ({ name: c.name, id: c.id, origin: "auto-filtered", importedAt: c.importedAt })),
-  ];
+  ], [pendingChannels, filteredChannels]);
   reviewListRef.current = reviewChannels;
 
   const {
     acting, history, rescanning,
     handleDecision: rawHandleDecision,
-    handleGoBack, handleToggleStar, handleRescan,
+    handleGoBack: rawGoBack, handleToggleStar, handleRescan,
   } = useCuratorActions({
-    data, setData, fetchNext, fetchStats, selectedLabels, notes: channelNotes,
+    data, setData, selectedLabels, notes: channelNotes,
     isStarred, setIsStarred, setSelectedLabels, setPlayingVideoId,
   });
+
+  // Wrap go-back to also update reviewingChannel so next decision uses correct state
+  const handleGoBack = useCallback(() => {
+    if (history.length === 0) return;
+    const last = history[history.length - 1];
+    setReviewingChannel({ name: last.name, id: last.id });
+    rawGoBack();
+  }, [history, rawGoBack]);
+
+  // Preload cache — stores Promises so in-flight fetches can be awaited (no duplicate requests)
+  const preloadedRef = useRef<Map<string, Promise<{ uploads: import("./types").Upload[]; topics: string[] } | null | undefined>>>(new Map());
+
+  // Preload the next channel's uploads in background (max 3 cached)
+  const preloadChannel = useCallback((channelId: string) => {
+    if (preloadedRef.current.has(channelId)) return;
+    // Keep cache small — drop oldest if over limit
+    if (preloadedRef.current.size >= 3) {
+      const firstKey = preloadedRef.current.keys().next().value;
+      if (firstKey) preloadedRef.current.delete(firstKey);
+    }
+    const promise = fetch(`/api/curator?rescan=true&channelId=${channelId}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.autoRejected) return null;
+        return { uploads: json.uploads || [] as import("./types").Upload[], topics: json.topics || [] as string[] };
+      })
+      .catch(() => {
+        // Remove from cache so loadChannelForReview retries with a fresh fetch
+        preloadedRef.current.delete(channelId);
+        return undefined;
+      });
+    preloadedRef.current.set(channelId, promise);
+  }, []);
+
+  // Trigger preload whenever the current channel changes
+  useEffect(() => {
+    if (!reviewingChannel) return;
+    const snapshot = reviewListRef.current;
+    const currentIdx = snapshot.findIndex((c) => c.id === reviewingChannel.id);
+    const remaining = snapshot.filter((c) => c.id !== reviewingChannel.id);
+    if (remaining.length === 0) return;
+    const nextIdx = currentIdx >= 0 && currentIdx < remaining.length ? currentIdx : 0;
+    const next = remaining[nextIdx] || remaining[0];
+    if (next) preloadChannel(next.id);
+  }, [reviewingChannel, preloadChannel]);
+
+  // Ref to avoid stale closure — loadChannelForReview is defined later but always current via ref
+  const loadChannelRef = useRef<(ch: ReviewChannel, listLength: number) => Promise<boolean>>(null!);
 
   // Wrap handleDecision: after approve/reject, auto-advance to next channel
   const handleDecision = useCallback(
     async (decision: "approve" | "reject") => {
       if (!reviewingChannel) return;
       const currentId = reviewingChannel.id;
+      // Capture snapshot BEFORE any async work — guaranteed correct
+      const snapshot = [...reviewListRef.current];
 
-      await rawHandleDecision(decision);
+      // Fire decision (now fire-and-forget internally)
+      rawHandleDecision(decision);
 
-      // Refresh lists
-      await Promise.all([fetchPending(), fetchFiltered(), fetchStats()]);
+      // Refresh lists in background — don't block the next channel load
+      Promise.all([fetchPending(), fetchFiltered(), fetchStats()]).catch(console.error);
 
-      // Find next channel in the list (after current one)
-      const list = reviewListRef.current;
-      const currentIdx = list.findIndex((c) => c.id === currentId);
-      const remaining = list.filter((c) => c.id !== currentId);
+      // Find next channel using the pre-async snapshot
+      const currentIdx = snapshot.findIndex((c) => c.id === currentId);
+      const remaining = snapshot.filter((c) => c.id !== currentId);
 
       if (remaining.length === 0) {
-        // No more channels — show "all caught up"
         setReviewingChannel(null);
         return;
       }
 
-      // Pick next: the one after current, or first if at end
+      // Pick next: same position (or wrap to first)
       const nextIdx = currentIdx >= 0 && currentIdx < remaining.length ? currentIdx : 0;
-      const next = remaining[nextIdx] || remaining[0];
 
       // Load next channel — skip any that get auto-rejected (< 6 uploads)
       let loaded = false;
@@ -128,17 +178,17 @@ function CuratorDashboard() {
       let pool = remaining;
       while (!loaded && pool.length > 0) {
         const candidate = pool[tryIdx] || pool[0];
-        loaded = await loadChannelForReview(candidate, pool.length);
+        loaded = await loadChannelRef.current(candidate, pool.length);
         if (!loaded) {
           pool = pool.filter((c) => c.id !== candidate.id);
           tryIdx = 0;
         }
       }
       if (!loaded) {
-        setReviewingChannel(null); // all remaining got auto-rejected
+        setReviewingChannel(null);
       }
     },
-    [rawHandleDecision, fetchPending, fetchFiltered, fetchStats, reviewingChannel, setData, setSelectedLabels, setPlayingVideoId]
+    [rawHandleDecision, fetchPending, fetchFiltered, fetchStats, reviewingChannel, preloadChannel]
   );
 
   // Sync starred state
@@ -186,12 +236,13 @@ function CuratorDashboard() {
   }, [fetchApproved, fetchStats]);
 
   const handleChangeDecision = useCallback(
-    async (channelId: string, channelName: string, newDecision: "reject") => {
-      await fetch("/api/curator", {
+    (channelId: string, channelName: string, newDecision: "reject") => {
+      // Fire-and-forget
+      fetch("/api/curator", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "changeDecision", channelId, channelName, newDecision }),
-      });
+      }).catch(console.error);
       setApprovedChannels((prev) => prev.filter((c) => c.id !== channelId));
       setApprovedView({ mode: "landing" });
       fetchStats();
@@ -204,14 +255,39 @@ function CuratorDashboard() {
   const loadChannelForReview = useCallback(
     async (ch: ReviewChannel, listLength: number) => {
       setSelectedLabels(new Set());
+      setChannelNotes("");
       setPlayingVideoId(null);
+
+      // Check preload cache first (stores Promises — works even if still in-flight)
+      const cachedPromise = preloadedRef.current.get(ch.id);
+      if (cachedPromise) {
+        preloadedRef.current.delete(ch.id);
+        const cached = await cachedPromise;
+        if (cached) {
+          setReviewingChannel(ch);
+          setData({
+            channel: { name: ch.name, id: ch.id },
+            uploads: cached.uploads,
+            topics: cached.topics,
+            reviewed: 0,
+            total: listLength,
+          });
+          return true;
+        }
+        if (cached === null) {
+          // auto-rejected during preload
+          await Promise.all([fetchPending(), fetchFiltered(), fetchStats()]);
+          return false;
+        }
+        // undefined = preload failed, fall through to fresh fetch
+      }
+
       const res = await fetch(`/api/curator?rescan=true&channelId=${ch.id}`);
       const json = await res.json();
 
       if (json.autoRejected) {
-        // Channel auto-rejected (too few uploads) — refresh lists and try next
         await Promise.all([fetchPending(), fetchFiltered(), fetchStats()]);
-        return false; // signal: didn't load, try next
+        return false;
       }
 
       setReviewingChannel(ch);
@@ -222,10 +298,11 @@ function CuratorDashboard() {
         reviewed: 0,
         total: listLength,
       });
-      return true; // loaded successfully
+      return true;
     },
     [setData, setSelectedLabels, setPlayingVideoId, fetchPending, fetchFiltered, fetchStats]
   );
+  loadChannelRef.current = loadChannelForReview;
 
   const handleReviewChannel = useCallback(
     async (ch: ReviewChannel) => {
@@ -236,6 +313,28 @@ function CuratorDashboard() {
       }
     },
     [loadChannelForReview, reviewChannels.length]
+  );
+
+  const handleSkipReview = useCallback(
+    async () => {
+      if (!reviewingChannel) return;
+      const snapshot = [...reviewListRef.current];
+      const currentIdx = snapshot.findIndex((c) => c.id === reviewingChannel.id);
+      const remaining = snapshot.filter((c) => c.id !== reviewingChannel.id);
+
+      if (remaining.length === 0) {
+        setReviewingChannel(null);
+        return;
+      }
+
+      const nextIdx = currentIdx >= 0 && currentIdx < remaining.length ? currentIdx : 0;
+      const candidate = remaining[nextIdx] || remaining[0];
+      const loaded = await loadChannelForReview(candidate, remaining.length);
+      if (!loaded) {
+        setReviewingChannel(null);
+      }
+    },
+    [reviewingChannel, loadChannelForReview]
   );
 
   const handleExitReview = useCallback(() => {
@@ -252,17 +351,22 @@ function CuratorDashboard() {
   const handleQuickImport = useCallback(
     async (url: string) => {
       setImporting(true);
-      const res = await fetch("/api/curator/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls: url }),
-      });
-      const result = await res.json();
-      if (result.added?.length > 0) {
-        fetchPending();
-        fetchStats();
+      try {
+        const res = await fetch("/api/curator/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls: url }),
+        });
+        const result = await res.json();
+        if (result.added?.length > 0) {
+          fetchPending();
+          fetchStats();
+        }
+      } catch (e) {
+        console.error("Import failed:", e);
+      } finally {
+        setImporting(false);
       }
-      setImporting(false);
     },
     [fetchPending, fetchStats]
   );
@@ -294,16 +398,15 @@ function CuratorDashboard() {
 
   // --- Rescue from Rejected ---
   const handleRescueRejected = useCallback(
-    async (channelId: string, channelName: string) => {
-      // Move from rejected back to music-channels (New/Review)
-      await fetch("/api/curator", {
+    (channelId: string, channelName: string) => {
+      // Fire-and-forget — move from rejected back to Review
+      fetch("/api/curator", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "rescueChannel", channelId, channelName }),
-      });
-      fetchRejected();
-      fetchPending();
-      fetchStats();
+      }).catch(console.error);
+      // Refresh lists in background
+      Promise.all([fetchRejected(), fetchPending(), fetchStats()]).catch(console.error);
     },
     [fetchRejected, fetchPending, fetchStats]
   );
@@ -322,23 +425,26 @@ function CuratorDashboard() {
   const handleRescueFromReview = useCallback(async () => {
     if (!rejectedReviewChannel || rejectedReviewActing) return;
     setRejectedReviewActing(true);
-    await fetch("/api/curator", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "rescueChannel", channelId: rejectedReviewChannel.id, channelName: rejectedReviewChannel.name }),
-    });
-    // Auto-advance to next rejected
-    const currentId = rejectedReviewChannel.id;
-    await fetchRejected();
-    fetchPending();
-    fetchStats();
-    setRejectedReviewActing(false);
-    // Find next
-    const remaining = rejectedChannels.filter((c) => c.id !== currentId);
-    if (remaining.length > 0) {
-      handleReviewRejectedChannel(remaining[0]);
-    } else {
-      setRejectedReviewChannel(null);
+    try {
+      await fetch("/api/curator", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "rescueChannel", channelId: rejectedReviewChannel.id, channelName: rejectedReviewChannel.name }),
+      });
+      // Auto-advance to next rejected after API confirms
+      const currentId = rejectedReviewChannel.id;
+      const remaining = rejectedChannels.filter((c) => c.id !== currentId);
+      if (remaining.length > 0) {
+        handleReviewRejectedChannel(remaining[0]);
+      } else {
+        setRejectedReviewChannel(null);
+      }
+      // Refresh lists in background
+      Promise.all([fetchRejected(), fetchPending(), fetchStats()]).catch(console.error);
+    } catch (e) {
+      console.error("Rescue failed:", e);
+    } finally {
+      setRejectedReviewActing(false);
     }
   }, [rejectedReviewChannel, rejectedReviewActing, rejectedChannels, fetchRejected, fetchPending, fetchStats, handleReviewRejectedChannel]);
 
@@ -456,6 +562,8 @@ function CuratorDashboard() {
             onGoBack={handleGoBack}
             onToggleStar={(starred: boolean) => setIsStarred(starred)}
             onRescan={handleRescan}
+            onSkip={handleSkipReview}
+            onExit={handleExitReview}
             notes={channelNotes}
             onNotesChange={setChannelNotes}
           />

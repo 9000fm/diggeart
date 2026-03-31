@@ -1,12 +1,25 @@
 @import "tailwindcss";
 
+/* Prevent text inflation on mobile */
+html, body {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Mobile-only: prevent pinch gestures and overscroll refresh */
+@media (pointer: coarse) {
+  html, body {
+    touch-action: manipulation;
+    overscroll-behavior: none;
+  }
+}
+
 :root {
   --sidebar-width: 80px;
   --banner-height: 36px;
   --header-height: 68px;
-  --header-height-mobile: 56px;
-  --nav-height-mobile: 48px;
-  --player-height: 168px;
+  --header-height-mobile: 72px;
+  --nav-height-mobile: 64px;
+  --player-height: 148px;
 
   /* Light theme (default) */
   --bg: #ffffff;
@@ -388,8 +401,8 @@ body {
 @media (min-width: 500px) {
   :root { --player-height: 96px; }
 }
-@media (min-width: 1024px) {
-  :root { --player-height: 96px; }
+@media (min-width: 1152px) {
+  :root { --player-height: 90px; }
 }
 
 /* Now-playing banner transitions (enter/exit handled by Framer Motion) */

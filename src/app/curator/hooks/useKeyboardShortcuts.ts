@@ -35,8 +35,8 @@ export function useKeyboardShortcuts({
 
       // Tab keyboard nav: 1/2/3
       if (e.key === "1") { setActiveTab("approved"); return; }
-      if (e.key === "2") { setActiveTab("rejected"); return; }
-      if (e.key === "3") { setActiveTab("review"); return; }
+      if (e.key === "2") { setActiveTab("review"); return; }
+      if (e.key === "3") { setActiveTab("rejected"); return; }
 
       // Review mode: ReviewQueue component handles its own shortcuts
       if (isReviewing) return;

@@ -201,6 +201,16 @@ export function ApprovedBrowser({
                       </span>
                     )}
                   </div>
+                  {ch.notes && (
+                    <span
+                      className="shrink-0 text-[var(--text-muted)]/50 hover:text-[var(--text-muted)] transition-colors"
+                      title={ch.notes}
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                    </span>
+                  )}
                   {ch.isStarred && (
                     <span className="text-amber-400 text-sm leading-none shrink-0">
                       &#9733;

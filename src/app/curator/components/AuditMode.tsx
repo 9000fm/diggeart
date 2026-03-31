@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { ApprovedChannel, CuratorStats } from "../types";
 import { ChannelAuditBody } from "./ChannelAuditBody";
 import { CuratorStatsBar } from "./CuratorStatsBar";
@@ -19,6 +20,7 @@ interface AuditModeProps {
     d: "reject"
   ) => void;
   fetchStats: () => void;
+  onRescan?: () => void;
 }
 
 export function AuditMode({
@@ -29,15 +31,19 @@ export function AuditMode({
   onExit,
   onChangeDecision,
   fetchStats,
+  onRescan,
 }: AuditModeProps) {
   const [labels, setLabels] = useState<Set<string>>(
     new Set(channel.labels || [])
   );
   const [auditChannel, setAuditChannel] = useState(channel);
+  const [saveFlash, setSaveFlash] = useState(false);
+  const flashTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const handleSaveLabels = useCallback(async () => {
+  const handleSaveLabels = useCallback(() => {
     const labelArr = Array.from(labels);
-    await fetch("/api/curator", {
+    // Fire-and-forget
+    fetch("/api/curator", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -45,21 +51,23 @@ export function AuditMode({
         channelId: channel.id,
         labels: labelArr,
       }),
-    });
+    }).catch(console.error);
+    // Visual feedback
+    if (flashTimeout.current) clearTimeout(flashTimeout.current);
+    setSaveFlash(true);
+    flashTimeout.current = setTimeout(() => setSaveFlash(false), 400);
   }, [channel.id, labels]);
 
-  const handleToggleStar = useCallback(async () => {
-    const res = await fetch("/api/curator", {
+  const handleToggleStar = useCallback(() => {
+    setAuditChannel((prev) => ({ ...prev, isStarred: !prev.isStarred }));
+    fetch("/api/curator", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         channelId: channel.id,
         channelName: channel.name,
       }),
-    });
-    const result = await res.json();
-    setAuditChannel((prev) => ({ ...prev, isStarred: result.starred }));
-    fetchStats();
+    }).then(() => fetchStats()).catch(console.error);
   }, [channel.id, channel.name, fetchStats]);
 
   const toggleLabel = (label: string) => {
@@ -71,18 +79,23 @@ export function AuditMode({
     });
   };
 
+  const handleReject = useCallback(() => {
+    if (!window.confirm(`Reject "${channel.name}"? This removes it from approved channels.`)) return;
+    onChangeDecision(channel.id, channel.name, "reject");
+  }, [channel.id, channel.name, onChangeDecision]);
+
   // Keyboard shortcuts for audit mode
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === "l" || e.key === "L") handleSaveLabels();
-      if (e.key === "r" || e.key === "R") onChangeDecision(channel.id, channel.name, "reject");
+      if (e.key === "r" || e.key === "R") handleReject();
       if (e.key === "f" || e.key === "F") handleToggleStar();
       if (e.key === "b" || e.key === "B" || e.key === "Escape") onExit();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [handleSaveLabels, handleToggleStar, onChangeDecision, onExit, channel.id, channel.name]);
+  }, [handleSaveLabels, handleToggleStar, handleReject, onExit]);
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] font-mono">
@@ -120,7 +133,7 @@ export function AuditMode({
           <div className="flex gap-3 mb-2">
             <button
               onClick={handleSaveLabels}
-              className="relative flex-[2] flex items-center rounded-none bg-emerald-600 text-white transition-all duration-100 hover:shadow-[0_4px_20px_rgba(0,0,0,0.3)] active:scale-[0.93] active:shadow-none"
+              className="relative flex-[2] flex items-center rounded-none bg-emerald-600 text-white transition-all duration-100 hover:shadow-[0_4px_20px_rgba(0,0,0,0.3)] active:scale-[0.93] active:shadow-none overflow-hidden"
             >
               <div className="w-1.5 self-stretch bg-emerald-400 shrink-0" />
               <div className="flex-1 flex items-center justify-between px-4 py-2.5">
@@ -131,11 +144,20 @@ export function AuditMode({
                   L
                 </kbd>
               </div>
+              <AnimatePresence>
+                {saveFlash && (
+                  <motion.div
+                    key="save-flash"
+                    initial={{ opacity: 0.7 }}
+                    animate={{ opacity: 0 }}
+                    transition={{ duration: 0.35, ease: "easeOut" }}
+                    className="absolute inset-0 bg-emerald-400 pointer-events-none"
+                  />
+                )}
+              </AnimatePresence>
             </button>
             <button
-              onClick={() =>
-                onChangeDecision(channel.id, channel.name, "reject")
-              }
+              onClick={handleReject}
               className="relative flex-1 flex items-center rounded-none bg-[var(--bg-alt)] text-[var(--text-muted)] transition-all duration-100 hover:text-[var(--text)] hover:bg-[var(--border)] active:scale-[0.93]"
             >
               <div className="w-1 self-stretch bg-[var(--text-muted)] shrink-0" />

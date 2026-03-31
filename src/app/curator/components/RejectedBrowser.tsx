@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { relativeDate } from "../utils";
 
 interface RejectedChannelItem {
   name: string;
   id: string;
   reviewedAt?: string | null;
   importedAt?: string | null;
+  notes?: string | null;
 }
 
 interface RejectedBrowserProps {
@@ -14,18 +16,6 @@ interface RejectedBrowserProps {
   loading: boolean;
   onRescue: (channelId: string, channelName: string) => void;
   onReviewChannel?: (ch: { name: string; id: string }) => void;
-}
-
-function relativeDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return "";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  return `${Math.floor(months / 12)}y ago`;
 }
 
 export function RejectedBrowser({
@@ -124,6 +114,16 @@ export function RejectedBrowser({
                   </span>
                 )}
               </div>
+              {ch.notes && (
+                <span
+                  className="shrink-0 text-[var(--text-muted)]/50 hover:text-[var(--text-muted)] transition-colors cursor-default"
+                  title={ch.notes}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </span>
+              )}
               <a
                 href={`https://www.youtube.com/channel/${ch.id}`}
                 target="_blank"

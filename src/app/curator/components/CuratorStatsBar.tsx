@@ -15,9 +15,9 @@ export function CuratorStatsBar({ stats }: CuratorStatsBarProps) {
       <span className="opacity-30">/</span>
       <span className="text-emerald-500 font-bold">{stats.approved}</span> approved
       <span className="opacity-30">/</span>
-      <span className="font-bold">{stats.rejected}</span> rejected
-      <span className="opacity-30">/</span>
       <span className="text-[var(--text-secondary)] font-bold">{stats.pending}</span> pending
+      <span className="opacity-30">/</span>
+      <span className="font-bold">{stats.rejected}</span> rejected
     </div>
   );
 }

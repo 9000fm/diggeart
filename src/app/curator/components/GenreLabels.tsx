@@ -9,13 +9,13 @@ interface GenreLabelsProps {
 
 export function GenreLabels({ selected, onToggle }: GenreLabelsProps) {
   return (
-    <div className="mb-3">
-      <div className="flex flex-wrap gap-1.5">
+    <div className="mb-2">
+      <div className="flex flex-wrap gap-1">
         {GENRE_LABELS.map((label) => (
           <button
             key={label}
             onClick={() => onToggle(label)}
-            className={`px-2.5 py-1 text-[10px] rounded-full transition-all duration-150 ${
+            className={`px-1 text-[7px] rounded-full transition-all duration-150 ${
               selected.has(label)
                 ? "bg-[var(--accent)] text-[var(--accent-text)] shadow-sm"
                 : "border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--text-secondary)] hover:text-[var(--text)]"

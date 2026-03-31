@@ -17,10 +17,10 @@ export function CuratorTabBar({
   reviewCount,
   rejectedCount,
 }: CuratorTabBarProps) {
-  const tabs: { key: CuratorTab; label: string; badge?: number; color?: string }[] = [
-    { key: "approved", label: "Approved", badge: approvedCount, color: "text-emerald-500" },
-    { key: "rejected", label: "Rejected", badge: rejectedCount },
-    { key: "review", label: "Review", badge: reviewCount, color: "text-[var(--text-secondary)]" },
+  const tabs: { key: CuratorTab; label: string; badge?: number; color?: string; shortcut: string }[] = [
+    { key: "approved", label: "Approved", badge: approvedCount, color: "text-emerald-500", shortcut: "1" },
+    { key: "review", label: "Review", badge: reviewCount, color: "text-[var(--text-secondary)]", shortcut: "2" },
+    { key: "rejected", label: "Rejected", badge: rejectedCount, shortcut: "3" },
   ];
 
   return (
@@ -35,6 +35,7 @@ export function CuratorTabBar({
               : "border-transparent text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)]/50"
           }`}
         >
+          <kbd className="mr-2 text-[10px] font-normal opacity-70 border border-[var(--text-muted)]/40 px-1.5 py-0.5 rounded-sm">{tab.shortcut}</kbd>
           {tab.label}
           {tab.badge != null && tab.badge > 0 && (
             <span className={`ml-2 text-[9px] font-bold ${tab.color || "text-[var(--text-muted)]"}`}>

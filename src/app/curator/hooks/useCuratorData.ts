@@ -13,7 +13,7 @@ export function useCuratorData() {
   const [approvedChannels, setApprovedChannels] = useState<ApprovedChannel[]>([]);
   const [approvedLoading, setApprovedLoading] = useState(false);
   const [rejectedChannels, setRejectedChannels] = useState<
-    { name: string; id: string; reviewedAt?: string | null; importedAt?: string | null }[]
+    { name: string; id: string; reviewedAt?: string | null; importedAt?: string | null; notes?: string | null }[]
   >([]);
   const [rejectedLoading, setRejectedLoading] = useState(false);
   const [filteredChannels, setFilteredChannels] = useState<FilteredChannel[]>([]);
@@ -29,49 +29,79 @@ export function useCuratorData() {
 
   const fetchNext = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/curator");
-    const json = await res.json();
-    setData(json);
-    setLoading(false);
-    return json;
+    try {
+      const res = await fetch("/api/curator");
+      const json = await res.json();
+      setData(json);
+      return json;
+    } catch (e) {
+      console.error("fetchNext failed:", e);
+      return null;
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const fetchStats = useCallback(async () => {
-    const res = await fetch("/api/curator?mode=stats");
-    const json = await res.json();
-    setStats(json);
+    try {
+      const res = await fetch("/api/curator?mode=stats");
+      const json = await res.json();
+      setStats(json);
+    } catch (e) {
+      console.error("fetchStats failed:", e);
+    }
   }, []);
 
   const fetchApproved = useCallback(async () => {
     setApprovedLoading(true);
-    const res = await fetch("/api/curator?mode=approved");
-    const json = await res.json();
-    setApprovedChannels(json.channels || []);
-    setApprovedLoading(false);
+    try {
+      const res = await fetch("/api/curator?mode=approved");
+      const json = await res.json();
+      setApprovedChannels(json.channels || []);
+    } catch (e) {
+      console.error("fetchApproved failed:", e);
+    } finally {
+      setApprovedLoading(false);
+    }
   }, []);
 
   const fetchRejected = useCallback(async () => {
     setRejectedLoading(true);
-    const res = await fetch("/api/curator?mode=rejected");
-    const json = await res.json();
-    setRejectedChannels(json.channels || []);
-    setRejectedLoading(false);
+    try {
+      const res = await fetch("/api/curator?mode=rejected");
+      const json = await res.json();
+      setRejectedChannels(json.channels || []);
+    } catch (e) {
+      console.error("fetchRejected failed:", e);
+    } finally {
+      setRejectedLoading(false);
+    }
   }, []);
 
   const fetchFiltered = useCallback(async () => {
     setFilteredLoading(true);
-    const res = await fetch("/api/curator?mode=filtered");
-    const json = await res.json();
-    setFilteredChannels(json.channels || []);
-    setFilteredLoading(false);
+    try {
+      const res = await fetch("/api/curator?mode=filtered");
+      const json = await res.json();
+      setFilteredChannels(json.channels || []);
+    } catch (e) {
+      console.error("fetchFiltered failed:", e);
+    } finally {
+      setFilteredLoading(false);
+    }
   }, []);
 
   const fetchPending = useCallback(async () => {
     setPendingLoading(true);
-    const res = await fetch("/api/curator?mode=pending");
-    const json = await res.json();
-    setPendingChannels(json.channels || []);
-    setPendingLoading(false);
+    try {
+      const res = await fetch("/api/curator?mode=pending");
+      const json = await res.json();
+      setPendingChannels(json.channels || []);
+    } catch (e) {
+      console.error("fetchPending failed:", e);
+    } finally {
+      setPendingLoading(false);
+    }
   }, []);
 
   const checkSubs = useCallback(async () => {

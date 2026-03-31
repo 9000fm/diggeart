@@ -19,22 +19,22 @@ export async function GET(req: NextRequest) {
   const rescan = req.nextUrl.searchParams.get("rescan");
   const rescanChannelId = req.nextUrl.searchParams.get("channelId");
 
-  // Stats
+  // Stats — single query instead of 6
   if (mode === "stats") {
-    const { count: total } = await supabase.from("curator_channels").select("*", { count: "exact", head: true });
-    const { count: approved } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "approved");
-    const { count: rejected } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "rejected");
-    const { count: pending } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "pending");
-    const { count: filtered } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "filtered");
-    const { count: starred } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("starred", true);
+    const { data: rows } = await supabase
+      .from("curator_channels")
+      .select("status, starred");
 
-    return NextResponse.json({
-      imported: total || 0,
-      approved: approved || 0,
-      rejected: rejected || 0,
-      starred: starred || 0,
-      pending: (pending || 0) + (filtered || 0),
-    });
+    const stats = { imported: 0, approved: 0, rejected: 0, starred: 0, pending: 0 };
+    for (const row of rows || []) {
+      stats.imported++;
+      if (row.status === "approved") stats.approved++;
+      else if (row.status === "rejected") stats.rejected++;
+      else if (row.status === "pending" || row.status === "filtered") stats.pending++;
+      if (row.starred) stats.starred++;
+    }
+
+    return NextResponse.json(stats);
   }
 
   // Check subs
@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
   if (mode === "rejected") {
     const { data: channels } = await supabase
       .from("curator_channels")
-      .select("channel_id, name, reviewed_at, imported_at")
+      .select("channel_id, name, reviewed_at, imported_at, notes")
       .eq("status", "rejected")
       .order("name");
 
@@ -100,6 +100,7 @@ export async function GET(req: NextRequest) {
         id: c.channel_id,
         reviewedAt: c.reviewed_at,
         importedAt: c.imported_at,
+        notes: c.notes,
       })),
     });
   }
@@ -160,14 +161,15 @@ export async function GET(req: NextRequest) {
       console.error("Failed to rescan uploads for", chData.name, e);
     }
 
-    // Update scan info
-    await supabase
+    // Update scan info (non-critical metadata)
+    const { error: scanErr } = await supabase
       .from("curator_channels")
       .update({
         last_scanned_at: new Date().toISOString(),
         uploads_fetched: allUploads.length,
       })
       .eq("channel_id", rescanChannelId);
+    if (scanErr) console.error("Failed to update scan info:", scanErr);
 
     const uploads = pickUploads(allUploads);
 
@@ -216,8 +218,10 @@ export async function GET(req: NextRequest) {
     .single();
 
   if (!nextChannel) {
-    const { count: total } = await supabase.from("curator_channels").select("*", { count: "exact", head: true });
-    const { count: approved } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "approved");
+    const [{ count: total }, { count: approved }] = await Promise.all([
+      supabase.from("curator_channels").select("*", { count: "exact", head: true }),
+      supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "approved"),
+    ]);
     return NextResponse.json({ done: true, reviewed: total || 0, total: total || 0, approvedCount: approved || 0 });
   }
 
@@ -226,14 +230,17 @@ export async function GET(req: NextRequest) {
     allUploads = await getChannelUploads(nextChannel.channel_id, 50, true, true);
   } catch { /* ignore */ }
 
-  await supabase
+  const { error: scanErr2 } = await supabase
     .from("curator_channels")
     .update({ last_scanned_at: new Date().toISOString(), uploads_fetched: allUploads.length })
     .eq("channel_id", nextChannel.channel_id);
+  if (scanErr2) console.error("Failed to update scan info:", scanErr2);
 
-  const { count: total } = await supabase.from("curator_channels").select("*", { count: "exact", head: true });
-  const { count: approved } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "approved");
-  const { count: pending } = await supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "pending");
+  const [{ count: total }, { count: approved }, { count: pending }] = await Promise.all([
+    supabase.from("curator_channels").select("*", { count: "exact", head: true }),
+    supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "approved"),
+    supabase.from("curator_channels").select("*", { count: "exact", head: true }).eq("status", "pending"),
+  ]);
 
   return NextResponse.json({
     channel: { name: nextChannel.name, id: nextChannel.channel_id },
@@ -248,11 +255,18 @@ export async function GET(req: NextRequest) {
 
 // POST: Record a decision (approve/reject)
 export async function POST(req: NextRequest) {
-  const { channelId, channelName, decision, labels, notes } = await req.json();
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json();
+  const { channelId, decision, labels, notes } = body;
+  if (!channelId || !decision || !["approve", "reject"].includes(decision)) {
+    return NextResponse.json({ error: "Invalid request: channelId and decision (approve|reject) required" }, { status: 400 });
+  }
   const now = new Date().toISOString();
 
   if (decision === "approve") {
-    await supabase
+    const { error } = await supabase
       .from("curator_channels")
       .update({
         status: "approved",
@@ -261,8 +275,9 @@ export async function POST(req: NextRequest) {
         reviewed_at: now,
       })
       .eq("channel_id", channelId);
+    if (error) return NextResponse.json({ error: "Database error" }, { status: 500 });
   } else if (decision === "reject") {
-    await supabase
+    const { error } = await supabase
       .from("curator_channels")
       .update({
         status: "rejected",
@@ -270,75 +285,93 @@ export async function POST(req: NextRequest) {
         notes: notes || null,
       })
       .eq("channel_id", channelId);
+    if (error) return NextResponse.json({ error: "Database error" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });
 }
 
 // PUT: Various actions
+const VALID_PUT_ACTIONS = ["sendToPending", "rescueChannel", "rescueFiltered", "rescueToFiltered", "confirmRejectFiltered", "changeDecision", "updateLabels"];
+
 export async function PUT(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const body = await req.json();
+  const { action, channelId } = body;
+  if (!action || !channelId || !VALID_PUT_ACTIONS.includes(action)) {
+    return NextResponse.json({ error: "Invalid request: action and channelId required" }, { status: 400 });
+  }
 
   // Send to pending (filtered) from review
-  if (body.action === "sendToPending" && body.channelId) {
-    await supabase
+  if (action === "sendToPending") {
+    const { error } = await supabase
       .from("curator_channels")
       .update({ status: "filtered", notes: "Rejected from Review" })
-      .eq("channel_id", body.channelId);
+      .eq("channel_id", channelId);
+    if (error) return NextResponse.json({ error: "Database error" }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
   // Rescue from rejected → pending (music-channels / review)
-  if (body.action === "rescueChannel" && body.channelId) {
-    await supabase
+  if (action === "rescueChannel") {
+    const { error } = await supabase
       .from("curator_channels")
       .update({ status: "pending", reviewed_at: null })
-      .eq("channel_id", body.channelId);
+      .eq("channel_id", channelId);
+    if (error) return NextResponse.json({ error: "Database error" }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
   // Rescue from filtered → pending (review)
-  if (body.action === "rescueFiltered" && body.channelId) {
-    await supabase
+  if (action === "rescueFiltered") {
+    const { error } = await supabase
       .from("curator_channels")
       .update({ status: "pending", reviewed_at: null, notes: null })
-      .eq("channel_id", body.channelId);
+      .eq("channel_id", channelId);
+    if (error) return NextResponse.json({ error: "Database error" }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
   // Rescue from rejected → filtered (pending review)
-  if (body.action === "rescueToFiltered" && body.channelId) {
-    await supabase
+  if (action === "rescueToFiltered") {
+    const { error } = await supabase
       .from("curator_channels")
       .update({ status: "filtered", notes: "Rescued from Rejected" })
-      .eq("channel_id", body.channelId);
+      .eq("channel_id", channelId);
+    if (error) return NextResponse.json({ error: "Database error" }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
   // Confirm reject from filtered → rejected
-  if (body.action === "confirmRejectFiltered" && body.channelId) {
-    await supabase
+  if (action === "confirmRejectFiltered") {
+    const { error } = await supabase
       .from("curator_channels")
       .update({ status: "rejected", reviewed_at: new Date().toISOString() })
-      .eq("channel_id", body.channelId);
+      .eq("channel_id", channelId);
+    if (error) return NextResponse.json({ error: "Database error" }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
   // Change decision (from approved → rejected)
-  if (body.action === "changeDecision" && body.channelId) {
-    await supabase
+  if (action === "changeDecision") {
+    const { error } = await supabase
       .from("curator_channels")
       .update({ status: body.newDecision || "rejected", reviewed_at: new Date().toISOString(), labels: [] })
-      .eq("channel_id", body.channelId);
+      .eq("channel_id", channelId);
+    if (error) return NextResponse.json({ error: "Database error" }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
   // Update labels
-  if (body.action === "updateLabels" && body.channelId) {
-    await supabase
+  if (action === "updateLabels") {
+    if (!Array.isArray(body.labels)) return NextResponse.json({ error: "labels must be an array" }, { status: 400 });
+    const { error } = await supabase
       .from("curator_channels")
       .update({ labels: body.labels })
-      .eq("channel_id", body.channelId);
+      .eq("channel_id", channelId);
+    if (error) return NextResponse.json({ error: "Database error" }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
 
@@ -347,7 +380,12 @@ export async function PUT(req: NextRequest) {
 
 // PATCH: Toggle star
 export async function PATCH(req: NextRequest) {
-  const { channelId } = await req.json();
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json();
+  const { channelId } = body;
+  if (!channelId) return NextResponse.json({ error: "channelId required" }, { status: 400 });
 
   const { data: ch } = await supabase
     .from("curator_channels")
@@ -358,10 +396,11 @@ export async function PATCH(req: NextRequest) {
   if (!ch) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const newStarred = !ch.starred;
-  await supabase
+  const { error } = await supabase
     .from("curator_channels")
     .update({ starred: newStarred })
     .eq("channel_id", channelId);
+  if (error) return NextResponse.json({ error: "Database error" }, { status: 500 });
 
   return NextResponse.json({ starred: newStarred });
 }

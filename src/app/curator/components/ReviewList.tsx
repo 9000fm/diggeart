@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { relativeDate } from "../utils";
 
 interface ReviewChannel {
   name: string;
@@ -21,17 +22,6 @@ interface ReviewListProps {
   importing: boolean;
 }
 
-function relativeDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return "";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  return `${Math.floor(months / 12)}y ago`;
-}
 
 export function ReviewList({
   channels,
@@ -46,12 +36,26 @@ export function ReviewList({
 }: ReviewListProps) {
   const [search, setSearch] = useState("");
   const [quickUrl, setQuickUrl] = useState("");
+  const [sortMode, setSortMode] = useState<"recent" | "az">("recent");
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return channels;
-    const q = search.toLowerCase();
-    return channels.filter((ch) => ch.name.toLowerCase().includes(q));
-  }, [channels, search]);
+    let result = channels;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((ch) => ch.name.toLowerCase().includes(q));
+    }
+    if (sortMode === "az") {
+      result = [...result].sort((a, b) => a.name.localeCompare(b.name));
+    } else {
+      result = [...result].sort((a, b) => {
+        if (!a.importedAt && !b.importedAt) return 0;
+        if (!a.importedAt) return 1;
+        if (!b.importedAt) return -1;
+        return new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime();
+      });
+    }
+    return result;
+  }, [channels, search, sortMode]);
 
   const handleSubmitUrl = (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,6 +128,28 @@ export function ReviewList({
           />
         )}
         {!channels.length || channels.length <= 10 ? <div className="flex-1" /> : null}
+        <div className="flex items-center border border-[var(--border)] rounded-lg overflow-hidden shrink-0">
+          <button
+            onClick={() => setSortMode("recent")}
+            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+              sortMode === "recent"
+                ? "bg-[var(--accent)] text-[var(--accent-text)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text)]"
+            }`}
+          >
+            Recent
+          </button>
+          <button
+            onClick={() => setSortMode("az")}
+            className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+              sortMode === "az"
+                ? "bg-[var(--accent)] text-[var(--accent-text)]"
+                : "text-[var(--text-muted)] hover:text-[var(--text)]"
+            }`}
+          >
+            A-Z
+          </button>
+        </div>
         <button
           onClick={onSync}
           disabled={syncing || syncDone}

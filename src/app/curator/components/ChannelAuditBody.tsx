@@ -47,6 +47,16 @@ export function ChannelAuditBody({
     fetchUploads();
   }, [fetchUploads]);
 
+  // X keyboard shortcut for rescan
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "x" || e.key === "X") fetchUploads();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [fetchUploads]);
+
   return (
     <>
       {/* Channel info */}
@@ -79,6 +89,7 @@ export function ChannelAuditBody({
             rel="noopener noreferrer"
             className="text-[var(--text-muted)] hover:text-[var(--text)] text-xs uppercase tracking-[0.2em] transition-colors"
           >
+            <svg className="w-4 h-4 inline-block mr-1.5 -mt-px" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8zM9.5 15.6V8.4l6.3 3.6-6.3 3.6z"/></svg>
             View on YouTube &rarr;
           </a>
           <button

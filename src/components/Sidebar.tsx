@@ -326,7 +326,7 @@ export default function Sidebar({
 
       {/* ===== DESKTOP: Fixed header bar ===== */}
       <header
-        className="hidden lg:flex fixed left-0 right-0 z-50 h-[var(--header-height)] bg-[var(--bg)]/80 backdrop-blur-md backdrop-saturate-150 border-b border-[var(--border)]/50 items-center px-2 gap-4"
+        className="hidden min-[1152px]:flex fixed left-0 right-0 z-50 h-[var(--header-height)] bg-[var(--bg)]/80 backdrop-blur-md backdrop-saturate-150 border-b border-[var(--border)]/50 items-center px-4 gap-5"
         style={{ top: "var(--banner-height)" }}
       >
         <div className="shrink-0 min-w-[var(--sidebar-width)] flex justify-start pl-[5px]">
@@ -463,7 +463,7 @@ export default function Sidebar({
 
       {/* ===== DESKTOP: Sidebar below header ===== */}
       <aside
-        className="hidden lg:flex fixed left-0 z-40 w-[var(--sidebar-width)] bg-[var(--bg)] border-r border-[var(--border)] text-[var(--text)] flex-col items-center py-4"
+        className="hidden min-[1152px]:flex fixed left-0 z-40 w-[var(--sidebar-width)] bg-[var(--bg)] border-r border-[var(--border)] text-[var(--text)] flex-col items-center py-4"
         style={{
           top: "calc(var(--banner-height) + var(--header-height))",
           height: "calc(100vh - var(--banner-height) - var(--header-height))",
@@ -612,7 +612,7 @@ export default function Sidebar({
 
       {/* ===== MOBILE: Fixed header bar ===== */}
       <header
-        className="flex lg:hidden fixed left-0 right-0 z-50 h-14 bg-gradient-to-b from-[var(--bg-alt)] to-[var(--bg)] items-center px-2 gap-2"
+        className="flex min-[1152px]:hidden fixed left-0 right-0 z-50 h-[72px] bg-[var(--bg)] border-b border-[var(--border)]/30 items-center px-3 gap-3"
         style={{ top: "var(--banner-height)" }}
       >
         <span
@@ -744,7 +744,7 @@ export default function Sidebar({
       {/* ===== MOBILE: Nav icons below header ===== */}
       <div
         data-mobile-nav
-        className="flex lg:hidden fixed left-0 right-0 z-40 h-12 bg-[var(--bg)] border-b border-[var(--border)] items-center justify-evenly px-0"
+        className="flex min-[1152px]:hidden fixed left-0 right-0 z-40 h-16 bg-[var(--bg)] border-b border-[var(--border)] items-center justify-evenly px-0"
         style={{ top: "calc(var(--banner-height) + var(--header-height-mobile))" }}
       >
         {NAV_ITEMS.map((item, i) => {
@@ -753,10 +753,10 @@ export default function Sidebar({
             <Fragment key={item.key}>
               <button
                 onClick={() => { onViewChange(item.key); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                className={`flex-1 h-full flex items-center justify-center cursor-pointer transition-all duration-200 ${
+                className={`w-12 h-12 flex items-center justify-center rounded-xl cursor-pointer transition-all duration-200 ${
                   isActive
-                    ? "text-[var(--text)] opacity-100"
-                    : "text-[var(--text-muted)] opacity-60 hover:text-[var(--text)] hover:opacity-100"
+                    ? "text-[var(--text)] bg-[var(--bg-alt)] opacity-100 shadow-sm"
+                    : "text-[var(--text-muted)] opacity-60 hover:text-[var(--text)] hover:opacity-100 hover:bg-[var(--bg-alt)]"
                 }`}
               >
                 {item.icon(isActive)}
@@ -774,7 +774,7 @@ export default function Sidebar({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="lg:hidden fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm"
+            className="min-[1152px]:hidden fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm"
             onClick={() => setShowAbout(false)}
           >
             <motion.div

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import Image from "next/image";
@@ -45,7 +45,7 @@ function formatDate(iso: string): string {
 
 const BURST_COLORS = ["#f87171", "#fb923c", "#f472b6", "#e879f9", "#fbbf24", "#34d399"];
 
-export default function MusicCard({
+export default memo(function MusicCard({
   card,
   saved,
   isGracePeriod = false,
@@ -320,4 +320,4 @@ export default function MusicCard({
       </div>
     </motion.div>
   );
-}
+})

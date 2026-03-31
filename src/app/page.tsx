@@ -120,6 +120,13 @@ export default function Home() {
     document.head.appendChild(tag);
   }, []);
 
+  // ── Cleanup progress interval on unmount ──
+  useEffect(() => {
+    return () => {
+      if (ytProgressInterval.current) clearInterval(ytProgressInterval.current);
+    };
+  }, []);
+
   // ── Supabase: load saved likes on mount ──
   useEffect(() => {
     if (!session?.user?.email) return;
@@ -196,8 +203,12 @@ export default function Home() {
       try {
         const current = p.getCurrentTime();
         const duration = p.getDuration();
-        setAudioProgress(current);
-        if (duration > 0) setAudioDuration(duration);
+        const state = p.getPlayerState();
+        // Only update progress state when playing (state 1) — avoids unnecessary re-renders when paused
+        if (state === 1) {
+          setAudioProgress(current);
+          if (duration > 0) setAudioDuration(duration);
+        }
         // End detection — catches track end even in background tabs
         // where onStateChange(ENDED) is deferred
         if (duration > 0 && current >= duration - 0.5 && !hasAdvancedRef.current) {
@@ -385,7 +396,9 @@ export default function Home() {
 
   // Play random track — scoped to the current active view
   const playRandomTrack = useCallback(() => {
-    const currentView = activeViewRef.current;
+    const currentView = nowPlayingCardRef.current?.id
+      ? (cardViewMap.current.get(nowPlayingCardRef.current.id) || activeViewRef.current)
+      : activeViewRef.current;
     const entries = Array.from(cardRegistry.current.entries());
     const candidates = entries.filter(
       ([id]) => id !== nowPlayingCardRef.current?.id && cardViewMap.current.get(id) === currentView
@@ -604,8 +617,7 @@ export default function Home() {
   const handleClosePlayer = useCallback(() => {
     stopYTProgressPoller();
     if (ytPlayerRef.current) {
-      try { ytPlayerRef.current.destroy(); } catch { /* ignore */ }
-      ytPlayerRef.current = null;
+      try { ytPlayerRef.current.stopVideo(); } catch { /* ignore */ }
     }
     setPlayingId(null);
     setIsPlaying(false);
@@ -698,22 +710,39 @@ export default function Home() {
     }
   }, []);
 
-  // Volume control
+  // Volume control — throttled setState to avoid full page re-render on every pixel
+  const volumeThrottleRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const handleVolumeChange = useCallback((newVolume: number) => {
-    setVolume(newVolume);
-    localStorage.setItem("digeart-volume", String(newVolume));
+    volumeRef.current = newVolume;
     if (ytPlayerRef.current) {
       try { ytPlayerRef.current.setVolume(newVolume); } catch { /* ignore */ }
     }
-    if (newVolume > 0 && isMuted) {
+    if (newVolume > 0 && isMutedRef.current) {
+      isMutedRef.current = false;
       setIsMuted(false);
       if (ytPlayerRef.current) try { ytPlayerRef.current.unMute(); } catch { /* ignore */ }
     }
-    if (newVolume === 0 && !isMuted) {
+    if (newVolume === 0 && !isMutedRef.current) {
+      isMutedRef.current = true;
       setIsMuted(true);
       if (ytPlayerRef.current) try { ytPlayerRef.current.mute(); } catch { /* ignore */ }
     }
-  }, [isMuted]);
+    // Throttled state + localStorage update (every 150ms instead of every pixel)
+    if (!volumeThrottleRef.current) {
+      volumeThrottleRef.current = setTimeout(() => {
+        setVolume(volumeRef.current);
+        localStorage.setItem("digeart-volume", String(volumeRef.current));
+        volumeThrottleRef.current = undefined;
+      }, 50);
+    }
+  }, []);
+
+  // Commit volume immediately — called on drag end
+  const handleVolumeCommit = useCallback((newVolume: number) => {
+    if (volumeThrottleRef.current) { clearTimeout(volumeThrottleRef.current); volumeThrottleRef.current = undefined; }
+    setVolume(newVolume);
+    localStorage.setItem("digeart-volume", String(newVolume));
+  }, []);
 
   const handleToggleMute = useCallback(() => {
     setIsMuted((prev) => {
@@ -818,7 +847,7 @@ export default function Home() {
 
   return (
     <main
-      className="layout-shift min-h-screen bg-[var(--bg)] lg:ml-[var(--sidebar-width)]"
+      className="layout-shift min-h-screen bg-[var(--bg)] min-[1152px]:ml-[var(--sidebar-width)]"
       data-player={hasPlayer ? "true" : "false"}
     >
       {/* Hidden YT Player container */}
@@ -931,6 +960,7 @@ export default function Home() {
             volume={volume}
             isMuted={isMuted}
             onVolumeChange={handleVolumeChange}
+            onVolumeCommit={handleVolumeCommit}
             onToggleMute={handleToggleMute}
             isLiked={likedIds.has(nowPlayingCard.id)}
             onToggleLike={() => toggleLike(nowPlayingCard.id)}

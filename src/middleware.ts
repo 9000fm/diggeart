@@ -1,8 +1,13 @@
 import { auth } from "@/auth";
+import { NextResponse } from "next/server";
 
-export default auth(() => {
-  // Auth gates disabled until real Google OAuth credentials are configured.
-  // To enable: check req.auth and redirect unauthenticated users.
+export default auth((req) => {
+  if (!req.auth) {
+    if (req.nextUrl.pathname.startsWith("/api/curator")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.redirect(new URL("/", req.url));
+  }
 });
 
 export const config = {

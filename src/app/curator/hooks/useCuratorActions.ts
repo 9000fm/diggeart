@@ -13,8 +13,6 @@ interface HistoryEntry {
 interface UseCuratorActionsProps {
   data: CuratorData | null;
   setData: React.Dispatch<React.SetStateAction<CuratorData | null>>;
-  fetchNext: () => Promise<CuratorData>;
-  fetchStats: () => Promise<void>;
   selectedLabels: Set<string>;
   notes: string;
   isStarred: boolean;
@@ -26,8 +24,6 @@ interface UseCuratorActionsProps {
 export function useCuratorActions({
   data,
   setData,
-  fetchNext,
-  fetchStats,
   selectedLabels,
   notes,
   isStarred,
@@ -59,7 +55,8 @@ export function useCuratorActions({
           wasStarred: isStarred,
         },
       ]);
-      await fetch("/api/curator", {
+      // Fire-and-forget — decision is idempotent, no need to block UI
+      fetch("/api/curator", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -69,12 +66,11 @@ export function useCuratorActions({
           labels: labelsToSave,
           notes: notes || undefined,
         }),
-      });
+      }).catch(console.error);
       actingRef.current = false;
       setActing(false);
-      fetchNext();
     },
-    [data, fetchNext, selectedLabels, notes, isStarred]
+    [data, selectedLabels, notes, isStarred]
   );
 
   // Navigate back to previous channel (does NOT undo the decision)
@@ -95,53 +91,39 @@ export function useCuratorActions({
     }));
   }, [history, setData, setIsStarred, setSelectedLabels, setPlayingVideoId]);
 
-  const handleToggleStar = useCallback(async () => {
+  const handleToggleStar = useCallback(() => {
     if (!data?.channel) return;
-    const res = await fetch("/api/curator", {
+    const newStarred = !isStarred;
+    setIsStarred(newStarred);
+    fetch("/api/curator", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         channelId: data.channel.id,
         channelName: data.channel.name,
       }),
-    });
-    const result = await res.json();
-    setIsStarred(result.starred);
-    setData((prev) =>
-      prev ? { ...prev, starredCount: result.starredCount } : prev
-    );
-  }, [data, setIsStarred, setData]);
-
-  const handleSkip = useCallback(async () => {
-    if (!data?.channel) return;
-    await fetch("/api/curator", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ channelId: data.channel.id }),
-    });
-    fetchNext();
-  }, [data, fetchNext]);
-
-  const handleReviewSkipped = useCallback(async () => {
-    await fetch("/api/curator", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clear: true }),
-    });
-    fetchNext();
-    fetchStats();
-  }, [fetchNext, fetchStats]);
+    }).then((res) => res.json()).then((result) => {
+      setData((prev) =>
+        prev ? { ...prev, starredCount: result.starredCount } : prev
+      );
+    }).catch(console.error);
+  }, [data, isStarred, setIsStarred, setData]);
 
   const handleRescan = useCallback(async () => {
     if (!data?.channel || rescanning) return;
     setRescanning(true);
-    const res = await fetch(
-      `/api/curator?rescan=true&channelId=${data.channel.id}`
-    );
-    const json = await res.json();
-    setData(json);
-    setPlayingVideoId(null);
-    setRescanning(false);
+    try {
+      const res = await fetch(
+        `/api/curator?rescan=true&channelId=${data.channel.id}`
+      );
+      const json = await res.json();
+      setData((prev) => prev ? { ...prev, uploads: json.uploads || [], topics: json.topics || [] } : json);
+      setPlayingVideoId(null);
+    } catch (e) {
+      console.error("Rescan failed:", e);
+    } finally {
+      setRescanning(false);
+    }
   }, [data, rescanning, setData, setPlayingVideoId]);
 
   return {
@@ -151,8 +133,6 @@ export function useCuratorActions({
     handleDecision,
     handleGoBack,
     handleToggleStar,
-    handleSkip,
-    handleReviewSkipped,
     handleRescan,
   };
 }
