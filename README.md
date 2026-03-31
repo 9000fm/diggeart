@@ -24,10 +24,10 @@ Deep cuts from 150+ curated channels. All underground. All human-selected.
 
 ## Under the hood
 
-- **Seeded daily shuffle** — track pool reshuffles every 24h so the feed feels fresh without losing consistency
-- **3-tier channel pipeline** — channels go through import → curation (approve/reject) → Supabase storage
-- **Tag engine** — Hot (50k+ views), Rare (<5k views), New (last 30 days) computed from YouTube metadata
-- **YouTube player reuse** — single iframe, `loadVideoById()` for seamless track switching with no reload
+- Daily shuffled track pool for fresh discovery
+- Curated channel pipeline with approve/reject workflow
+- Tag engine based on YouTube metadata
+- Single-iframe player for seamless playback
 
 ## Roadmap
 
