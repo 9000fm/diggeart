@@ -1,5 +1,13 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+declare global {
+  interface Window {
+    YT: any;
+    onYouTubeIframeAPIReady: (() => void) | undefined;
+  }
+}
+
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { AnimatePresence } from "framer-motion";
