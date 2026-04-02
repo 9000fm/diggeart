@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import MusicCard from "./MusicCard";
+import MaintenanceScreen from "./MaintenanceScreen";
 import type { CardData } from "@/lib/types";
 
 interface MixesGridProps {
@@ -53,7 +54,10 @@ export default function MixesGrid({
         const offset = append ? pageRef.current * limit : 0;
         let url = `/api/mixes?limit=${limit}&offset=${offset}&tag=${tagParam}&rotate=${rotateRef.current}`;
         if (genreParam) url += `&genre=${encodeURIComponent(genreParam)}`;
-        const res = await fetch(url);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
         const data = await res.json();
         const newCards: CardData[] = data.cards || [];
         onCardsLoaded?.(newCards);
@@ -132,7 +136,7 @@ export default function MixesGrid({
   if (loading) {
     return (
       <div className="dot-grid grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-[11px] p-2 sm:p-[11px]">
-        {Array.from({ length: 10 }).map((_, i) => (
+        {Array.from({ length: 25 }).map((_, i) => (
           <div
             key={i}
             className="aspect-square skeleton-shimmer rounded-md"
@@ -143,19 +147,7 @@ export default function MixesGrid({
   }
 
   if (cards.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <svg className="w-12 h-12 text-[var(--text-muted)] mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-          <line x1="4" y1="10" x2="4" y2="14" />
-          <line x1="8" y1="6" x2="8" y2="18" />
-          <line x1="12" y1="4" x2="12" y2="20" />
-          <line x1="16" y1="8" x2="16" y2="16" />
-          <line x1="20" y1="7" x2="20" y2="17" />
-        </svg>
-        <p className="font-mono text-sm text-[var(--text-muted)] uppercase">No mixes found</p>
-        <p className="font-mono text-[11px] text-[var(--text-muted)] mt-1">Approve more channels with DJ sets via /curator</p>
-      </div>
-    );
+    return <MaintenanceScreen />;
   }
 
   return (

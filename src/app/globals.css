@@ -157,6 +157,10 @@ body {
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
+/* Maintenance screen animations */
+@keyframes gemRotateY { 0% { transform: rotateY(0deg); } 50% { transform: rotateY(180deg); } 100% { transform: rotateY(360deg); } }
+@keyframes driftDiagonal { from { transform: translate(0, 0); } to { transform: translate(-50%, -50%); } }
+
 /* Heart fill-from-below animation */
 @keyframes heartFillUp {
   0%   { clip-path: inset(100% 0 0 0); }

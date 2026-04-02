@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import MusicCard from "./MusicCard";
+import MaintenanceScreen from "./MaintenanceScreen";
 import type { CardData } from "@/lib/types";
 
 interface SamplesGridProps {
@@ -53,7 +54,10 @@ export default function SamplesGrid({
         const offset = append ? pageRef.current * limit : 0;
         let url = `/api/samples?limit=${limit}&offset=${offset}&tag=${tagParam}&rotate=${rotateRef.current}`;
         if (genreParam) url += `&genre=${encodeURIComponent(genreParam)}`;
-        const res = await fetch(url);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeout);
         const data = await res.json();
         const newCards: CardData[] = data.cards || [];
         onCardsLoaded?.(newCards);
@@ -132,7 +136,7 @@ export default function SamplesGrid({
   if (loading) {
     return (
       <div className="dot-grid grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-[11px] p-2 sm:p-[11px]">
-        {Array.from({ length: 15 }).map((_, i) => (
+        {Array.from({ length: 25 }).map((_, i) => (
           <div
             key={i}
             className="aspect-square skeleton-shimmer rounded-md"
@@ -143,16 +147,7 @@ export default function SamplesGrid({
   }
 
   if (cards.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <svg className="w-12 h-12 text-[var(--text-muted)] mb-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-          <circle cx="12" cy="12" r="10" />
-          <circle cx="12" cy="12" r="3" />
-        </svg>
-        <p className="font-mono text-sm text-[var(--text-muted)] uppercase">No samples found</p>
-        <p className="font-mono text-[11px] text-[var(--text-muted)] mt-1">Approve more channels with niche labels via /curator</p>
-      </div>
-    );
+    return <MaintenanceScreen />;
   }
 
   return (
