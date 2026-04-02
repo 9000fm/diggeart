@@ -613,7 +613,7 @@ export default function Sidebar({
 
                 <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[var(--border)]/50">
                   <span className="font-mono text-[11px] text-[var(--text-muted)] flex items-center gap-1"><svg className="w-4 h-4 shrink-0 -mt-px" viewBox="0 0 32 32"><polygon points="8,4 24,4 30,13 16,29 2,13" fill="currentColor" opacity="0.5"/><polygon points="8,4 12,13 16,4" fill="currentColor" opacity="0.35"/><polygon points="24,4 20,13 16,4" fill="currentColor" opacity="0.45"/><polygon points="2,13 12,13 16,29" fill="currentColor" opacity="0.3"/><polygon points="30,13 20,13 16,29" fill="currentColor" opacity="0.2"/><polygon points="12,13 20,13 16,29" fill="currentColor" opacity="0.25"/><polygon points="12,13 20,13 16,4" fill="currentColor" opacity="0.5"/></svg>a <a href="https://superself.online" target="_blank" rel="noopener noreferrer" className="font-bold hover:text-[var(--text-muted)] transition-colors">superself</a> project</span>
-                  <span className="font-mono text-[11px] text-[var(--text-muted)]">v1.5-beta</span>
+                  <span className="font-mono text-[11px] text-[var(--text-muted)]">v1.5.1-beta</span>
                 </div>
               </motion.div>
             )}
@@ -906,7 +906,7 @@ export default function Sidebar({
 
               <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[var(--border)]/50">
                 <span className="font-mono text-[11px] text-[var(--text-muted)] flex items-center gap-1"><svg className="w-4 h-4 shrink-0 -mt-px" viewBox="0 0 32 32"><polygon points="8,4 24,4 30,13 16,29 2,13" fill="currentColor" opacity="0.5"/><polygon points="8,4 12,13 16,4" fill="currentColor" opacity="0.35"/><polygon points="24,4 20,13 16,4" fill="currentColor" opacity="0.45"/><polygon points="2,13 12,13 16,29" fill="currentColor" opacity="0.3"/><polygon points="30,13 20,13 16,29" fill="currentColor" opacity="0.2"/><polygon points="12,13 20,13 16,29" fill="currentColor" opacity="0.25"/><polygon points="12,13 20,13 16,4" fill="currentColor" opacity="0.5"/></svg>a <a href="https://superself.online" target="_blank" rel="noopener noreferrer" className="font-bold hover:text-[var(--text-muted)] transition-colors">superself</a> project</span>
-                <span className="font-mono text-[11px] text-[var(--text-muted)]">v1.5-beta</span>
+                <span className="font-mono text-[11px] text-[var(--text-muted)]">v1.5.1-beta</span>
               </div>
             </motion.div>
           </>
