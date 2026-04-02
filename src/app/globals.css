@@ -157,6 +157,12 @@ body {
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
+/* Heart fill-from-below animation */
+@keyframes heartFillUp {
+  0%   { clip-path: inset(100% 0 0 0); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+
 /* EQ bar base — GPU-accelerated via scaleY (no layout reflow) */
 .eq-bar-base {
   height: 100%;

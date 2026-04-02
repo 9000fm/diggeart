@@ -41,15 +41,9 @@ export default function UndoToast({ visible, onUndo, trackName = "Track", durati
           transition={{ type: "spring", stiffness: 300, damping: 28 }}
           className="fixed left-1/2 -translate-x-1/2 z-50 min-[1152px]:left-[calc(var(--sidebar-width)/2+50%)] bottom-[calc(var(--player-height,0px)+12px)]"
         >
-          <div className="relative flex items-center gap-4 px-5 py-3 bg-[var(--bg-alt)]/90 backdrop-blur-xl border border-[var(--border)]/50 rounded-xl shadow-2xl overflow-hidden">
-            {/* Water fill — rises from bottom as time runs out */}
-            <div
-              className="absolute inset-0 bg-[var(--text)]/8 transition-none pointer-events-none"
-              style={{ clipPath: `inset(${progress}% 0 0 0)` }}
-            />
-
+          <div className="flex items-center gap-4 px-5 py-3 bg-[var(--bg-alt)]/90 backdrop-blur-xl border border-[var(--border)]/50 rounded-xl shadow-2xl overflow-hidden">
             {/* Info */}
-            <div className="flex flex-col min-w-0 relative z-10">
+            <div className="flex flex-col min-w-0">
               <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--text-muted)]">
                 Removed from saved
               </span>
@@ -61,10 +55,18 @@ export default function UndoToast({ visible, onUndo, trackName = "Track", durati
             {/* Undo button */}
             <button
               onClick={(e) => { e.stopPropagation(); onUndo(); }}
-              className="shrink-0 px-3.5 py-1.5 font-mono text-[11px] uppercase tracking-wider text-[var(--text)] bg-[var(--text)]/10 hover:bg-[var(--text)]/20 rounded-lg transition-colors cursor-pointer relative z-10"
+              className="shrink-0 px-3 py-1 font-mono text-[9px] uppercase tracking-wider text-[var(--text)] bg-[var(--text)]/10 hover:bg-[var(--text)]/20 rounded-lg transition-colors cursor-pointer"
             >
               Undo
             </button>
+          </div>
+
+          {/* Progress bar along bottom edge */}
+          <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-[var(--text)]/5 rounded-b-xl overflow-hidden">
+            <motion.div
+              className="h-full bg-[var(--text)]/25"
+              style={{ width: `${progress}%` }}
+            />
           </div>
         </motion.div>
       )}

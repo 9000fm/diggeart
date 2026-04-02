@@ -94,6 +94,7 @@ export default function Home() {
   // Undo unlike state
   const [undoToastVisible, setUndoToastVisible] = useState(false);
   const [undoTrackName, setUndoTrackName] = useState("");
+  const [undoRestoredId, setUndoRestoredId] = useState<string | null>(null);
   const pendingUnlike = useRef<{ id: string; card: CardData; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   const skippingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -566,6 +567,8 @@ export default function Home() {
     setUndoToastVisible(false);
 
     // Restore in UI — card is still in grid, just remove from softDeletedIds
+    setUndoRestoredId(pending.id);
+    setTimeout(() => setUndoRestoredId(null), 100);
     setLikedIds((prev) => new Set(prev).add(pending.id));
     setSoftDeletedIds((prev) => {
       const next = new Set(prev);
@@ -593,6 +596,8 @@ export default function Home() {
     if (!item) return;
     // Move back to savedCards + likedIds
     const { deletedAt: _, ...card } = item;
+    setUndoRestoredId(id);
+    setTimeout(() => setUndoRestoredId(null), 100);
     setRecentlyRemoved((prev) => prev.filter((c) => c.id !== id));
     setSavedCards((prev) => [card, ...prev]);
     setLikedIds((prev) => new Set(prev).add(id));
@@ -1115,6 +1120,7 @@ export default function Home() {
             isAuthenticated={isAuthenticated}
             showQueue={showQueue}
             onToggleQueue={() => setShowQueue((v) => !v)}
+            undoRestoredId={undoRestoredId}
           />
         )}
       </AnimatePresence>

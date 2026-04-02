@@ -2,7 +2,7 @@
 
 import { useRef, useLayoutEffect, useState, useCallback, type ReactNode } from "react";
 
-export default function Tooltip({ label, children, position = "top", align = "center", className, show, hoverable = true, delay = 400 }: { label: string; children: ReactNode; position?: "top" | "bottom" | "left" | "right"; align?: "start" | "center" | "end"; className?: string; show?: boolean; hoverable?: boolean; delay?: number }) {
+export default function Tooltip({ label, children, position = "top", align = "center", className, show, hoverable = true, delay = 400, hideOnClick = false }: { label: string; children: ReactNode; position?: "top" | "bottom" | "left" | "right"; align?: "start" | "center" | "end"; className?: string; show?: boolean; hoverable?: boolean; delay?: number; hideOnClick?: boolean }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const [shiftX, setShiftX] = useState(0);
@@ -42,6 +42,13 @@ export default function Tooltip({ label, children, position = "top", align = "ce
     setHovered(false);
   }, []);
 
+  const onClickCapture = useCallback(() => {
+    if (!hideOnClick) return;
+    setHovered(false);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+  }, [hideOnClick]);
+
   const positionBase = isHorizontal
     ? {
         top: `bottom-full mb-2 ${align === "start" ? "left-0" : align === "end" ? "right-0" : "left-1/2"}`,
@@ -63,7 +70,7 @@ export default function Tooltip({ label, children, position = "top", align = "ce
   const visible = show || hovered;
 
   return (
-    <div ref={wrapRef} className="relative" onMouseEnter={onEnter} onMouseLeave={onLeave}>
+    <div ref={wrapRef} className="relative" onMouseEnter={onEnter} onMouseLeave={onLeave} onClickCapture={onClickCapture}>
       {children}
       <div
         ref={tipRef}

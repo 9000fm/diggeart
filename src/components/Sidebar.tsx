@@ -527,6 +527,7 @@ export default function Sidebar({
             onClick={() => {
               setAboutAnchor(aboutIconRef.current?.getBoundingClientRect() ?? null);
               setShowAbout((v) => !v);
+              setSettingsOpen(false);
             }}
             className="w-12 h-12 flex items-center justify-center rounded-xl text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)] transition-all duration-200"
           >
@@ -624,6 +625,7 @@ export default function Sidebar({
             onClick={() => {
               setSettingsAnchor(gearRef.current?.getBoundingClientRect() ?? null);
               setSettingsOpen(true);
+              setShowAbout(false);
             }}
             className="w-12 h-12 flex items-center justify-center rounded-xl text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-alt)] transition-all duration-200"
           >
@@ -795,7 +797,7 @@ export default function Sidebar({
           )}
         </div>
         <div data-auth-button className="shrink-0">
-          <AuthButton mobile onGoToSaved={() => onViewChange("saved")} onOpenSettings={() => { const el = document.querySelector('[data-auth-button]'); setSettingsAnchor(el?.getBoundingClientRect() ?? null); setSettingsOpen(true); }} onOpenInfo={() => setShowAbout((v) => !v)} />
+          <AuthButton mobile onGoToSaved={() => onViewChange("saved")} onOpenSettings={() => { const el = document.querySelector('[data-auth-button]'); setSettingsAnchor(el?.getBoundingClientRect() ?? null); setSettingsOpen(true); setShowAbout(false); }} onOpenInfo={() => { setShowAbout((v) => !v); setSettingsOpen(false); }} />
         </div>
       </header>
 
@@ -827,6 +829,7 @@ export default function Sidebar({
       {/* Mobile/Tablet About overlay — renders outside aside so it's visible on <lg */}
       <AnimatePresence>
         {showAbout && (
+          <>
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -834,15 +837,13 @@ export default function Sidebar({
             transition={{ duration: 0.15 }}
             className="min-[1152px]:hidden fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm"
             onClick={() => setShowAbout(false)}
-          >
-            <motion.div
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              className="absolute bottom-0 left-0 right-0 max-h-[80vh] overflow-y-auto bg-[var(--bg)] border-t border-[var(--border)] rounded-t-2xl shadow-2xl px-5 py-4"
-              onClick={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
+          />
+          <motion.div
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            className="min-[1152px]:hidden fixed bottom-0 left-0 right-0 max-h-[80vh] overflow-y-auto bg-[var(--bg)] border-t border-[var(--border)] rounded-t-2xl shadow-2xl px-5 py-4 z-[71]"
             >
               {/* Drag handle */}
               <div className="w-10 h-1 rounded-full bg-[var(--border)] mx-auto mb-3" />
@@ -908,7 +909,7 @@ export default function Sidebar({
                 <span className="font-mono text-[11px] text-[var(--text-muted)]">v1.5-beta</span>
               </div>
             </motion.div>
-          </motion.div>
+          </>
         )}
       </AnimatePresence>
 

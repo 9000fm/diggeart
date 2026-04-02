@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import Tooltip from "./Tooltip";
@@ -44,6 +44,7 @@ interface NowPlayingBannerProps {
   isAuthenticated?: boolean;
   showQueue?: boolean;
   onToggleQueue?: () => void;
+  undoRestoredId?: string | null;
 }
 
 function formatTime(seconds: number): string {
@@ -78,6 +79,7 @@ export default function NowPlayingBanner({
   isAuthenticated = true,
   showQueue = false,
   onToggleQueue,
+  undoRestoredId = null,
 }: NowPlayingBannerProps) {
   const [isDragging, setIsDragging] = useState(false);
   const isDraggingRef = useRef(false);
@@ -342,7 +344,23 @@ export default function NowPlayingBanner({
   const [likeNudge, setLikeNudge] = useState(false);
   const [tipLocked, setTipLocked] = useState(false);
   const [likeBurst, setLikeBurst] = useState(false);
+  const [likeFillUp, setLikeFillUp] = useState(false);
+  const prevIsLikedRef = useRef(isLiked);
   const likeBtnRef = useRef<HTMLButtonElement>(null);
+
+  const likeFillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useLayoutEffect(() => {
+    const isUndo = undoRestoredId === card.id;
+    if (isLiked && !prevIsLikedRef.current && isUndo) {
+      setLikeFillUp(true);
+      if (likeFillTimerRef.current) clearTimeout(likeFillTimerRef.current);
+      likeFillTimerRef.current = setTimeout(() => setLikeFillUp(false), 2500);
+    } else if (!isLiked && likeFillUp) {
+      setLikeFillUp(false);
+      if (likeFillTimerRef.current) clearTimeout(likeFillTimerRef.current);
+    }
+    prevIsLikedRef.current = isLiked;
+  }, [isLiked, undoRestoredId, card.id, likeFillUp]);
   const likeButton = (size: "sm" | "md" = "md") => onToggleLike ? (
     <Tooltip label={isAuthenticated ? (isLiked ? "Saved!" : "Save") : "Log in to save"} position="top">
       <motion.button
@@ -387,13 +405,11 @@ export default function NowPlayingBanner({
         <svg
           className={size === "sm" ? "w-3.5 h-3.5" : "w-4 h-4"}
           viewBox="0 0 24 24"
-          fill={isLiked ? "currentColor" : "none"}
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
         >
-          <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+          <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" fill={isLiked && !likeFillUp ? "currentColor" : "none"} stroke="currentColor" strokeWidth={isLiked && !likeFillUp ? 0 : 2} strokeLinecap="round" strokeLinejoin="round" />
+          {likeFillUp && (
+            <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" fill="currentColor" className="animate-[heartFillUp_2s_cubic-bezier(0.22,1,0.36,1)_forwards]" />
+          )}
         </svg>
       </motion.button>
     </Tooltip>
@@ -407,7 +423,7 @@ export default function NowPlayingBanner({
     return () => document.removeEventListener("locate-triggered", handler);
   }, []);
   const locateButton = (size: "sm" | "md" = "md") => onLocate ? (
-    <Tooltip label="Locate (l)" position="top">
+    <Tooltip label="Locate (l)" position="top" hideOnClick>
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -449,7 +465,7 @@ export default function NowPlayingBanner({
     }
   }, []);
   const fullscreenButton = (
-    <Tooltip label="Fullscreen (f)" position="top">
+    <Tooltip label="Fullscreen (f)" position="top" hideOnClick>
       <button
         onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
         className="shrink-0 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text)] transition-colors w-8 h-8 2xl:w-10 2xl:h-10 active:scale-95"
@@ -474,7 +490,7 @@ export default function NowPlayingBanner({
   );
 
   const queueButton = onToggleQueue ? (
-    <Tooltip label="Queue" position="top">
+    <Tooltip label="Queue" position="top" hideOnClick>
       <button
         onClick={(e) => { e.stopPropagation(); onToggleQueue(); }}
         className={`shrink-0 flex items-center justify-center transition-colors w-8 h-8 2xl:w-10 2xl:h-10 active:scale-95 ${

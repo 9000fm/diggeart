@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, memo } from "react";
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import Image from "next/image";
@@ -62,13 +62,22 @@ export default memo(function MusicCard({
   const burstKey = useRef(0);
   const prevSavedRef = useRef(saved);
 
-  // Trigger heart bounce on undo/restore (saved transitions false→true externally)
-  useEffect(() => {
-    if (saved && !prevSavedRef.current) {
-      setBurst(true);
+  const [fillUp, setFillUp] = useState(false);
+
+  // Trigger heart fill-from-below on undo/restore ONLY (not manual like)
+  const fillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useLayoutEffect(() => {
+    if (saved && !prevSavedRef.current && !burst) {
+      setFillUp(true);
+      if (fillTimerRef.current) clearTimeout(fillTimerRef.current);
+      fillTimerRef.current = setTimeout(() => setFillUp(false), 2500);
+    } else if (!saved && fillUp) {
+      // Unlike during fill animation — cancel it
+      setFillUp(false);
+      if (fillTimerRef.current) clearTimeout(fillTimerRef.current);
     }
     prevSavedRef.current = saved;
-  }, [saved]);
+  }, [saved, burst, fillUp]);
   const infoRef = useRef<HTMLDivElement>(null);
   const infoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -274,8 +283,13 @@ export default memo(function MusicCard({
                     : "opacity-0 group-hover:opacity-50 cursor-default"
             }`}
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth={saved ? 0 : 2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+            <svg className="w-4 h-4" viewBox="0 0 24 24">
+              {/* Outline (always visible when not saved) */}
+              <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" fill={saved && !fillUp ? "currentColor" : "none"} stroke="currentColor" strokeWidth={saved && !fillUp ? 0 : 2} strokeLinecap="round" strokeLinejoin="round" />
+              {/* Fill from below on restore */}
+              {fillUp && (
+                <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" fill="currentColor" className="animate-[heartFillUp_2s_cubic-bezier(0.22,1,0.36,1)_forwards]" />
+              )}
             </svg>
           </motion.button>
         </Tooltip>
