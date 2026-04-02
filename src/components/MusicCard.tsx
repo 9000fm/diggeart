@@ -188,7 +188,7 @@ export default memo(function MusicCard({
         } else {
           // No filter — compute from card data
           if (card.viewCount != null && card.viewCount >= 50_000) tags.push({ label: "Hot", color: "bg-red-500" });
-          if (card.starred && card.viewCount != null && card.viewCount < 10_000 && !isNew && card.publishedAt && (Date.now() - new Date(card.publishedAt).getTime()) > 2 * 365 * 86400000) tags.push({ label: "Rare", color: "bg-pink-500" });
+          if (card.viewCount != null && card.viewCount < 10_000 && !isNew && card.publishedAt && (Date.now() - new Date(card.publishedAt).getTime()) > 2 * 365 * 86400000) tags.push({ label: "Rare", color: "bg-pink-500" });
           if (isNew) tags.push({ label: "New", color: "bg-emerald-500" });
         }
 
