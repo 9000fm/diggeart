@@ -159,6 +159,7 @@ body {
 
 /* Maintenance screen animations */
 @keyframes gemRotateY { 0% { transform: rotateY(0deg); } 50% { transform: rotateY(180deg); } 100% { transform: rotateY(360deg); } }
+@keyframes gemShadow { 0%, 100% { width: 3rem; opacity: 0.15; } 25%, 75% { width: 1rem; opacity: 0.08; } 50% { width: 3rem; opacity: 0.15; } }
 @keyframes driftDiagonal { from { transform: translate(0, 0); } to { transform: translate(-50%, -50%); } }
 
 /* Heart fill-from-below animation */

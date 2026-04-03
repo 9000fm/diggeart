@@ -15,7 +15,7 @@ export default function MaintenanceScreen() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center relative overflow-hidden">
       {/* Wordmark */}
-      <p className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]/40 mb-4">
+      <p className="font-[family-name:var(--font-display)] text-2xl text-[var(--text-muted)]/30 mb-4">
         digeart
       </p>
 
@@ -36,12 +36,15 @@ export default function MaintenanceScreen() {
         </svg>
       </div>
 
-      {/* Separator */}
-      <div className="w-8 h-px bg-[var(--text-muted)]/20 mb-4" />
+      {/* Gem shadow — syncs with gem rotation */}
+      <div
+        className="h-[2px] rounded-full bg-[var(--text-muted)]/15 mb-4"
+        style={{ width: "3rem", animation: "gemShadow 3s ease-in-out infinite" }}
+      />
 
       {/* Message with cycling dots */}
       <p className="font-mono text-sm text-[var(--text)] font-bold tracking-wider">
-        We&apos;ll be right back<span className="inline-block w-[1.5em] text-left">{".".repeat(dotCount)}</span>
+        We&apos;ll be right back<span className="inline-block w-[2em] text-left">{".".repeat(dotCount)}</span>
       </p>
     </div>
   );

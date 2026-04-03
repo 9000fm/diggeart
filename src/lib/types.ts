@@ -20,4 +20,5 @@ export interface CardData {
   publishedAt: string | null;
   description: string | null;
   starred?: boolean;
+  genres?: string[];
 }

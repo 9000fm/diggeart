@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     const { cards, totalFiltered, needsRebuild } = await discoverFromYouTube(limit, offset, tag, genre, rotate);
 
     if (needsRebuild) {
-      after(() => rebuildDiscoverPool(genre));
+      after(() => rebuildDiscoverPool());
     }
 
     return NextResponse.json({

@@ -78,8 +78,8 @@ async function getApprovedChannels(): Promise<ApprovedChannel[]> {
 
 /* ── Persistent pool cache (Supabase) ────────────────────────────────── */
 
-const POOL_MAX_AGE = 3 * 60 * 60 * 1000; // 3 hours
-const RAW_CACHE_MAX_AGE = 12 * 60 * 60 * 1000; // 12 hours (deep fetch 2x/day)
+const POOL_MAX_AGE = 12 * 60 * 60 * 1000; // 12 hours (rebuilds ~2x/day)
+const RAW_CACHE_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hours (deep fetch 1x/day)
 
 interface PoolCacheResult<T = CardData[]> {
   data: T;
@@ -101,15 +101,36 @@ async function getPoolFromSupabase<T = CardData[]>(key: string, maxAge = POOL_MA
   }
 }
 
-/* ── Rebuild lock (prevents concurrent rebuilds of the same pool) ──── */
+/* ── Rebuild lock (Supabase-backed, works across Vercel instances) ─── */
 
-const globalRebuild = globalThis as typeof globalThis & {
-  __digeartRebuilding?: Set<string>;
-};
-if (!globalRebuild.__digeartRebuilding) {
-  globalRebuild.__digeartRebuilding = new Set();
+const LOCK_TTL = 5 * 60 * 1000; // 5 min — auto-expires if rebuild crashes
+
+async function acquireRebuildLock(poolKey: string): Promise<boolean> {
+  const key = `lock-${poolKey}`;
+  try {
+    const { data } = await supabase
+      .from("pool_cache")
+      .select("updated_at")
+      .eq("key", key)
+      .single();
+    if (data) {
+      const age = Date.now() - new Date(data.updated_at).getTime();
+      if (age < LOCK_TTL) return false; // Another instance is rebuilding
+    }
+    await supabase
+      .from("pool_cache")
+      .upsert({ key, data: { locked: true }, updated_at: new Date().toISOString() });
+    return true;
+  } catch {
+    return false;
+  }
 }
-const rebuildingPools = globalRebuild.__digeartRebuilding;
+
+async function releaseRebuildLock(poolKey: string): Promise<void> {
+  try {
+    await supabase.from("pool_cache").delete().eq("key", `lock-${poolKey}`);
+  } catch { /* non-critical */ }
+}
 
 async function savePoolToSupabase(key: string, pool: unknown): Promise<void> {
   try {
@@ -417,7 +438,7 @@ function videoThumbnail(videoId: string): string {
   return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 }
 
-function videoToCard(v: YouTubeVideo, starred = false): CardData {
+function videoToCard(v: YouTubeVideo, starred = false, genres?: string[]): CardData {
   const { name, artist } = parseVideoTitle(v.title, v.channelTitle);
   return {
     id: `yt-${v.id}`,
@@ -441,6 +462,7 @@ function videoToCard(v: YouTubeVideo, starred = false): CardData {
     publishedAt: v.publishedAt,
     description: v.description,
     starred,
+    genres,
   };
 }
 
@@ -452,18 +474,14 @@ interface PoolResult {
   needsRebuild: boolean;
 }
 
-/* ── Genre label filtering ────────────────────────────────────────────── */
+/* ── Genre filtering (on cards, not channels — no separate pools) ───── */
 
-function filterChannelsByGenre(
-  channels: { name: string; id: string; labels?: string[] }[],
-  genre?: string
-): { name: string; id: string; labels?: string[] }[] {
-  if (!genre) return channels;
-  // Support comma-separated genres (match ANY)
+function filterCardsByGenre(cards: CardData[], genre?: string): CardData[] {
+  if (!genre) return cards;
   const genres = genre.split(",").map((g) => g.trim().toLowerCase()).filter(Boolean);
-  if (genres.length === 0) return channels;
-  return channels.filter(
-    (c) => c.labels?.some((l) => genres.includes(l.toLowerCase()))
+  if (genres.length === 0) return cards;
+  return cards.filter(
+    (c) => !c.genres || c.genres.length === 0 || c.genres.some((g) => genres.includes(g.toLowerCase()))
   );
 }
 
@@ -472,17 +490,15 @@ function filterChannelsByGenre(
 interface RawVideo {
   video: YouTubeVideo;
   starred: boolean;
+  labels?: string[];
 }
 
 async function getRawVideos(
-  poolType: "discover" | "mixes" | "samples",
-  genre?: string
+  poolType: "discover" | "mixes" | "samples"
 ): Promise<{ raw: RawVideo[]; isStale: boolean }> {
-  const rawKey = genre
-    ? `raw-${poolType}-${genre.toLowerCase()}`
-    : `raw-${poolType}`;
+  const rawKey = `raw-${poolType}`;
 
-  // Check raw cache (12h TTL)
+  // Check raw cache (24h TTL)
   const cached = await getPoolFromSupabase<RawVideo[]>(rawKey, RAW_CACHE_MAX_AGE);
   if (cached && cached.data.length > 0 && !cached.isStale) {
     return { raw: cached.data, isStale: false };
@@ -521,8 +537,6 @@ async function getRawVideos(
     maxResults = 50;
   }
 
-  channels = filterChannelsByGenre(channels, genre);
-
   const allRaw: RawVideo[] = [];
   const BATCH_SIZE = 10;
   for (let i = 0; i < channels.length; i += BATCH_SIZE) {
@@ -533,7 +547,7 @@ async function getRawVideos(
     for (let j = 0; j < batch.length; j++) {
       if (results[j].status === "fulfilled") {
         for (const v of (results[j] as PromiseFulfilledResult<YouTubeVideo[]>).value) {
-          allRaw.push({ video: v, starred: batch[j].starred === true });
+          allRaw.push({ video: v, starred: batch[j].starred === true, labels: batch[j].labels });
         }
       }
     }
@@ -593,8 +607,14 @@ function smartSample(
     return result;
   };
 
-  const starredCards = sampleGroup(starred).map((v) => videoToCard(v, true));
-  const regularCards = sampleGroup(regular).map((v) => videoToCard(v, false));
+  // Build lookup: videoId → channel labels
+  const labelMap = new Map<string, string[]>();
+  for (const rv of raw) {
+    if (rv.labels) labelMap.set(rv.video.id, rv.labels);
+  }
+
+  const starredCards = sampleGroup(starred).map((v) => videoToCard(v, true, labelMap.get(v.id)));
+  const regularCards = sampleGroup(regular).map((v) => videoToCard(v, false, labelMap.get(v.id)));
   const totalAvailable = starredCards.length + regularCards.length;
   const starredTarget = Math.min(starredCards.length, Math.round(totalAvailable * 0.50));
   const regularTarget = totalAvailable - starredTarget;
@@ -629,19 +649,17 @@ function isValidHomepageVideo(v: YouTubeVideo): boolean {
   return true;
 }
 
-async function getDiscoverPool(genre?: string): Promise<{ pool: CardData[]; needsRebuild: boolean }> {
-  const poolKey = genre ? `discover-${genre.toLowerCase()}` : "discover";
-  const memoryCacheKey = `pool-${poolKey}`;
+async function getDiscoverPool(): Promise<{ pool: CardData[]; needsRebuild: boolean }> {
+  const memoryCacheKey = "pool-discover";
 
   // Layer 1: in-memory cache (instant)
   const memCached = cacheGet<CardData[]>(memoryCacheKey);
   if (memCached && memCached.length > 0) return { pool: memCached, needsRebuild: false };
 
   // Layer 2: Supabase persistent cache (survives cold starts)
-  const sbCached = await getPoolFromSupabase(poolKey);
+  const sbCached = await getPoolFromSupabase("discover");
   if (sbCached && sbCached.data.length > 0) {
     cacheSet(memoryCacheKey, sbCached.data, POOL_MAX_AGE);
-    // Stale-while-revalidate: serve stale data, signal background rebuild
     return { pool: sbCached.data, needsRebuild: sbCached.isStale };
   }
 
@@ -649,31 +667,26 @@ async function getDiscoverPool(genre?: string): Promise<{ pool: CardData[]; need
   return { pool: [], needsRebuild: true };
 }
 
-/** Full YouTube rebuild for discover pool — called synchronously on cold start or via after() on stale */
-async function buildDiscoverPool(genre?: string): Promise<CardData[]> {
-  const poolKey = genre ? `discover-${genre.toLowerCase()}` : "discover";
-  const memoryCacheKey = `pool-${poolKey}`;
-
-  const { raw } = await getRawVideos("discover", genre);
+async function buildDiscoverPool(): Promise<CardData[]> {
+  const { raw } = await getRawVideos("discover");
   const pool = smartSample(raw, isValidHomepageVideo);
 
   if (pool.length > 0) {
-    cacheSet(memoryCacheKey, pool, POOL_MAX_AGE);
-    await savePoolToSupabase(poolKey, pool);
+    cacheSet("pool-discover", pool, POOL_MAX_AGE);
+    await savePoolToSupabase("discover", pool);
   }
 
   return pool;
 }
 
-/** Background rebuild for discover pool (called from after()) */
-export async function rebuildDiscoverPool(genre?: string): Promise<void> {
-  const lockKey = genre ? `discover-${genre.toLowerCase()}` : "discover";
-  if (rebuildingPools.has(lockKey)) return;
-  rebuildingPools.add(lockKey);
+/** Background rebuild for discover pool — Supabase lock prevents duplicates across instances */
+export async function rebuildDiscoverPool(): Promise<void> {
+  const locked = await acquireRebuildLock("discover");
+  if (!locked) return;
   try {
-    await buildDiscoverPool(genre);
+    await buildDiscoverPool();
   } finally {
-    rebuildingPools.delete(lockKey);
+    await releaseRebuildLock("discover");
   }
 }
 
@@ -684,10 +697,11 @@ export async function discoverFromYouTube(
   genre?: string,
   rotate?: number
 ): Promise<PoolResult> {
-  const { pool, needsRebuild } = await getDiscoverPool(genre);
+  const { pool, needsRebuild } = await getDiscoverPool();
   if (pool.length === 0) return { cards: [], totalFiltered: 0, needsRebuild };
 
-  const filtered = applyTagFilter(pool, tag);
+  const genreFiltered = filterCardsByGenre(pool, genre);
+  const filtered = applyTagFilter(genreFiltered, tag);
   let feed = filtered;
   if (rotate && feed.length > 1) {
     const r = ((rotate % feed.length) + feed.length) % feed.length;
@@ -714,30 +728,25 @@ function isValidMixVideo(v: YouTubeVideo): boolean {
   return true;
 }
 
-async function buildMixesPool(genre?: string): Promise<CardData[]> {
-  const poolKey = genre ? `mixes-${genre.toLowerCase()}` : "mixes";
-  const memoryCacheKey = `pool-${poolKey}`;
-
-  const { raw } = await getRawVideos("mixes", genre);
+async function buildMixesPool(): Promise<CardData[]> {
+  const { raw } = await getRawVideos("mixes");
   const pool = smartSample(raw, isValidMixVideo);
 
   if (pool.length > 0) {
-    cacheSet(memoryCacheKey, pool, POOL_MAX_AGE);
-    await savePoolToSupabase(poolKey, pool);
+    cacheSet("pool-mixes", pool, POOL_MAX_AGE);
+    await savePoolToSupabase("mixes", pool);
   }
 
   return pool;
 }
 
-/** Background rebuild for mixes pool (called from after()) */
-export async function rebuildMixesPool(genre?: string): Promise<void> {
-  const lockKey = genre ? `mixes-${genre.toLowerCase()}` : "mixes";
-  if (rebuildingPools.has(lockKey)) return;
-  rebuildingPools.add(lockKey);
+export async function rebuildMixesPool(): Promise<void> {
+  const locked = await acquireRebuildLock("mixes");
+  if (!locked) return;
   try {
-    await buildMixesPool(genre);
+    await buildMixesPool();
   } finally {
-    rebuildingPools.delete(lockKey);
+    await releaseRebuildLock("mixes");
   }
 }
 
@@ -748,14 +757,13 @@ export async function discoverMixes(
   genre?: string,
   rotate?: number
 ): Promise<PoolResult> {
-  const poolKey = genre ? `mixes-${genre.toLowerCase()}` : "mixes";
-  const memoryCacheKey = `pool-${poolKey}`;
+  const memoryCacheKey = "pool-mixes";
   let needsRebuild = false;
 
   let pool = cacheGet<CardData[]>(memoryCacheKey);
 
   if (!pool || pool.length === 0) {
-    const sbCached = await getPoolFromSupabase(poolKey);
+    const sbCached = await getPoolFromSupabase("mixes");
     if (sbCached && sbCached.data.length > 0) {
       pool = sbCached.data;
       cacheSet(memoryCacheKey, pool, POOL_MAX_AGE);
@@ -768,7 +776,8 @@ export async function discoverMixes(
     pool = [];
   }
 
-  const filtered = applyTagFilter(pool, tag);
+  const genreFiltered = filterCardsByGenre(pool, genre);
+  const filtered = applyTagFilter(genreFiltered, tag);
   let feed = filtered;
   if (rotate && feed.length > 1) {
     const r = ((rotate % feed.length) + feed.length) % feed.length;
@@ -800,30 +809,25 @@ function isValidSampleVideo(v: YouTubeVideo): boolean {
   return true;
 }
 
-async function buildSamplesPool(genre?: string): Promise<CardData[]> {
-  const poolKey = genre ? `samples-${genre.toLowerCase()}` : "samples";
-  const memoryCacheKey = `pool-${poolKey}`;
-
-  const { raw } = await getRawVideos("samples", genre);
+async function buildSamplesPool(): Promise<CardData[]> {
+  const { raw } = await getRawVideos("samples");
   const pool = smartSample(raw, isValidSampleVideo);
 
   if (pool.length > 0) {
-    cacheSet(memoryCacheKey, pool, POOL_MAX_AGE);
-    await savePoolToSupabase(poolKey, pool);
+    cacheSet("pool-samples", pool, POOL_MAX_AGE);
+    await savePoolToSupabase("samples", pool);
   }
 
   return pool;
 }
 
-/** Background rebuild for samples pool (called from after()) */
-export async function rebuildSamplesPool(genre?: string): Promise<void> {
-  const lockKey = genre ? `samples-${genre.toLowerCase()}` : "samples";
-  if (rebuildingPools.has(lockKey)) return;
-  rebuildingPools.add(lockKey);
+export async function rebuildSamplesPool(): Promise<void> {
+  const locked = await acquireRebuildLock("samples");
+  if (!locked) return;
   try {
-    await buildSamplesPool(genre);
+    await buildSamplesPool();
   } finally {
-    rebuildingPools.delete(lockKey);
+    await releaseRebuildLock("samples");
   }
 }
 
@@ -834,14 +838,13 @@ export async function discoverSamples(
   genre?: string,
   rotate?: number
 ): Promise<PoolResult> {
-  const poolKey = genre ? `samples-${genre.toLowerCase()}` : "samples";
-  const memoryCacheKey = `pool-${poolKey}`;
+  const memoryCacheKey = "pool-samples";
   let needsRebuild = false;
 
   let pool = cacheGet<CardData[]>(memoryCacheKey);
 
   if (!pool || pool.length === 0) {
-    const sbCached = await getPoolFromSupabase(poolKey);
+    const sbCached = await getPoolFromSupabase("samples");
     if (sbCached && sbCached.data.length > 0) {
       pool = sbCached.data;
       cacheSet(memoryCacheKey, pool, POOL_MAX_AGE);
@@ -854,7 +857,8 @@ export async function discoverSamples(
     pool = [];
   }
 
-  const filtered = applyTagFilter(pool, tag);
+  const genreFiltered = filterCardsByGenre(pool, genre);
+  const filtered = applyTagFilter(genreFiltered, tag);
   let feed = filtered;
   if (rotate && feed.length > 1) {
     const r = ((rotate % feed.length) + feed.length) % feed.length;

@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const { cards, totalFiltered, needsRebuild } = await discoverSamples(limit, offset, tag, genre, rotate);
 
     if (needsRebuild) {
-      after(() => rebuildSamplesPool(genre));
+      after(() => rebuildSamplesPool());
     }
 
     return NextResponse.json({

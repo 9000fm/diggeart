@@ -53,4 +53,4 @@ This is a personal project in active development. If you have ideas or want to c
 
 ---
 
-a [superself](https://superself.online) project — v1.5.3-beta
+a [superself](https://superself.online) project — v1.6.0-beta

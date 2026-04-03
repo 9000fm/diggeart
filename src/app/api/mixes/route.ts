@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const { cards, totalFiltered, needsRebuild } = await discoverMixes(limit, offset, tag, genre, rotate);
 
     if (needsRebuild) {
-      after(() => rebuildMixesPool(genre));
+      after(() => rebuildMixesPool());
     }
 
     return NextResponse.json({

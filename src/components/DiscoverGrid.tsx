@@ -62,7 +62,7 @@ export default function DiscoverGrid({
         let url = `/api/discover?genres=${genres}&limit=${limit}&offset=${offset}&tag=${tagParam}&rotate=${rotateRef.current}`;
         if (genreParam) url += `&genre=${encodeURIComponent(genreParam)}`;
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
+        const timeout = setTimeout(() => controller.abort(), 20000);
         const res = await fetch(url, { signal: controller.signal });
         clearTimeout(timeout);
         const data = await res.json();
