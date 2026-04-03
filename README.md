@@ -1,6 +1,6 @@
 # digeart
 
-Deep cuts from 150+ curated channels. All underground. All human-selected.
+Deep cuts from curated underground channels. All human-selected.
 
 **[digeart.vercel.app](https://digeart.vercel.app)**
 
@@ -8,7 +8,7 @@ Deep cuts from 150+ curated channels. All underground. All human-selected.
 
 - Multi-genre & multi-tag filtering (Hot, Rare, New)
 - YouTube-powered playback with persistent player
-- 150+ curated underground channels
+- Curated underground channels
 - Samples, mixes & DJ sets
 - Dark/light themes
 - Google auth + saved tracks
@@ -53,4 +53,4 @@ This is a personal project in active development. If you have ideas or want to c
 
 ---
 
-a [superself](https://superself.online) project — v1.1-beta
+a [superself](https://superself.online) project — v1.5.3-beta

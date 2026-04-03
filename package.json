@@ -2,6 +2,7 @@
   "name": "digeart",
   "version": "0.1.0",
   "private": true,
+  "description": "Music discovery for diggers.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
