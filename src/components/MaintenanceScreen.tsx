@@ -1,17 +1,28 @@
 "use client";
 
-const SYMBOLS = "✦ ◇ ⬥ ✧ ◆ ⏣ ";
-const SYMBOL_ROW = SYMBOLS.repeat(20);
-const ROWS = Array.from({ length: 30 }, () => SYMBOL_ROW);
+import { useState, useEffect } from "react";
 
 export default function MaintenanceScreen() {
+  const [dotCount, setDotCount] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDotCount((prev) => (prev + 1) % 4);
+    }, 800);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center relative overflow-hidden">
+      {/* Wordmark */}
+      <p className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-muted)]/40 mb-4">
+        digeart
+      </p>
 
       {/* Spinning gem (Y-axis 3D rotation) */}
-      <div className="mb-5" style={{ perspective: "400px" }}>
+      <div className="mb-4" style={{ perspective: "400px" }}>
         <svg
-          className="w-12 h-12"
+          className="w-12 h-12 text-[var(--text-muted)]"
           viewBox="0 0 32 32"
           style={{ animation: "gemRotateY 3s ease-in-out infinite", transformStyle: "preserve-3d" }}
         >
@@ -25,15 +36,13 @@ export default function MaintenanceScreen() {
         </svg>
       </div>
 
-      {/* Message */}
-      <p className="font-mono text-sm text-[var(--text)] uppercase font-bold tracking-wider mb-2 relative z-10">
-        We'll be right back.
+      {/* Separator */}
+      <div className="w-8 h-px bg-[var(--text-muted)]/20 mb-4" />
+
+      {/* Message with cycling dots */}
+      <p className="font-mono text-sm text-[var(--text)] uppercase font-bold tracking-wider">
+        We'll be right back{".".repeat(dotCount)}
       </p>
-      <div className="flex items-center gap-1.5 relative z-10">
-        <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] animate-pulse" />
-        <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] animate-pulse" style={{ animationDelay: "0.3s" }} />
-        <span className="w-1 h-1 rounded-full bg-[var(--text-muted)] animate-pulse" style={{ animationDelay: "0.6s" }} />
-      </div>
     </div>
   );
 }
