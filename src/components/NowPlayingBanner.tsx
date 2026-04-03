@@ -92,6 +92,14 @@ export default function NowPlayingBanner({
   // Hover preview tooltip
   const [hoverPercent, setHoverPercent] = useState<number | null>(null);
 
+  // Delayed close button reveal
+  const [showClose, setShowClose] = useState(false);
+  useEffect(() => {
+    setShowClose(false);
+    const timer = setTimeout(() => setShowClose(true), 1200);
+    return () => clearTimeout(timer);
+  }, [card.id]);
+
   // EQ collapse
   const [eqActive, setEqActive] = useState(isPlaying);
   const eqBarRefs = useRef<(HTMLSpanElement | null)[]>([]);
@@ -894,17 +902,39 @@ export default function NowPlayingBanner({
   );
 
   // Close button — corner tab that pokes above the player top border
+  const [closeDismissing, setCloseDismissing] = useState(false);
+
+  const handleCloseClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCloseDismissing(true);
+    setTimeout(() => {
+      onClose();
+      setCloseDismissing(false);
+    }, 200);
+  }, [onClose]);
+
   const closeButton = (
-    <div className="absolute -top-[34px] right-4 z-40">
+    <div
+      className="absolute -top-[34px] right-2 z-40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ease-out"
+      style={{ pointerEvents: showClose ? "auto" : "none", visibility: showClose ? "visible" : "hidden" }}
+    >
+      {/* Hit area: bigger than visible button */}
       <button
-        onClick={(e) => { e.stopPropagation(); onClose(); }}
-        className="w-7 h-7 flex items-center justify-center rounded-xl bg-[var(--bg-alt)] border border-[var(--border)]/50 text-[var(--text-muted)] hover:scale-90 active:scale-75 active:opacity-60 transition-all duration-200 ease-out shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
+        onClick={handleCloseClick}
+        className="w-8 h-8 flex items-center justify-center cursor-pointer"
         aria-label="Close player"
       >
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18" />
-          <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
+        {/* Visible button: smaller, centered inside hit area */}
+        <span
+          className={`w-5 h-5 flex items-center justify-center rounded-[9px] bg-[var(--bg-alt)] border border-[var(--border)]/40 text-[var(--text)]/70 shadow-[0_2px_6px_rgba(0,0,0,0.2)] transition-all duration-150 ${
+            closeDismissing ? "scale-[0.3] opacity-0" : "active:scale-[0.92] active:translate-y-[0.5px]"
+          }`}
+        >
+          <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </span>
       </button>
     </div>
   );
@@ -919,7 +949,7 @@ export default function NowPlayingBanner({
       }}
       exit={{ y: "100%", opacity: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
-      className={`player-banner fixed left-0 right-0 min-[1152px]:left-[var(--sidebar-width)] bg-[var(--bg-alt)]/85 backdrop-blur-2xl backdrop-saturate-150 border-t border-[var(--border)]/50 overflow-visible`}
+      className={`group player-banner fixed left-0 right-0 min-[1152px]:left-[var(--sidebar-width)] bg-[var(--bg-alt)]/85 backdrop-blur-2xl backdrop-saturate-150 border-t border-[var(--border)]/50 overflow-visible`}
       style={{ bottom: 0, ...(!isMobile ? { height: "var(--player-height)" } : {}) }}
     >
       {/* Corner tab close — desktop only */}
