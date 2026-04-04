@@ -38,7 +38,7 @@ export default function MaintenanceScreen() {
 
       {/* Gem shadow — syncs with gem rotation */}
       <div
-        className="h-[2px] rounded-full bg-[var(--text-muted)]/15 mb-4"
+        className="h-[3px] rounded-full bg-[var(--text-muted)]/25 mb-4"
         style={{ width: "3rem", animation: "gemShadow 3s ease-in-out infinite" }}
       />
 
