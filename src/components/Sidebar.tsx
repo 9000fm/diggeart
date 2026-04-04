@@ -554,7 +554,7 @@ export default function Sidebar({
                   bottom: Math.max(16, window.innerHeight - aboutAnchor.bottom),
                 } : undefined}
               >
-                <p className="font-mono text-base text-[var(--text)] font-bold">digeart</p>
+                <p className="font-[family-name:var(--font-display)] text-2xl text-[var(--text)]">digeart</p>
                 <p className="font-mono text-xs text-[var(--text-muted)] mt-0.5">Music discovery for diggers. All human-selected.</p>
 
                 {/* Tag legend */}
@@ -849,7 +849,7 @@ export default function Sidebar({
               {/* Drag handle */}
               <div className="w-10 h-1 rounded-full bg-[var(--border)] mx-auto mb-3" />
 
-              <p className="font-mono text-base text-[var(--text)] font-bold">digeart</p>
+              <p className="font-[family-name:var(--font-display)] text-2xl text-[var(--text)]">digeart</p>
               <p className="font-mono text-xs text-[var(--text-muted)] mt-0.5">Music discovery for diggers. All human-selected.</p>
 
               {/* Tag legend */}

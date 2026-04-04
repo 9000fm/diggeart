@@ -43,7 +43,7 @@ export default function WelcomeScreen({ show, onDismiss }: WelcomeScreenProps) {
             className="max-w-xs w-full mx-4 px-8 pt-12 pb-8 text-center"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="font-[family-name:var(--font-display)] text-6xl text-white mb-3" style={{ textShadow: "0 0 40px rgba(255,255,255,0.3)" }}>digeart</p>
+            <p className="font-[family-name:var(--font-display)] text-5xl text-white mb-3" style={{ textShadow: "0 0 40px rgba(255,255,255,0.3)" }}>digeart</p>
             <p className="font-mono text-sm text-white/50 mb-8">Music discovery for diggers</p>
 
             {/* Gem divider */}

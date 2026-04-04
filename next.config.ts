@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { readFileSync } from "fs";
+import { withSentryConfig } from "@sentry/nextjs";
 import withBundleAnalyzer from "@next/bundle-analyzer";
 
 const pkg = JSON.parse(readFileSync("./package.json", "utf-8"));
@@ -21,4 +22,6 @@ const analyzer = withBundleAnalyzer({
   enabled: process.env.ANALYZE === "true",
 });
 
-export default analyzer(nextConfig);
+export default withSentryConfig(analyzer(nextConfig), {
+  silent: true,
+});

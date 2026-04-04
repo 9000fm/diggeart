@@ -1,6 +1,6 @@
 {
   "name": "digeart",
-  "version": "1.6.0-beta",
+  "version": "1.6.1-beta",
   "private": true,
   "description": "Music discovery for diggers.",
   "scripts": {
@@ -12,6 +12,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@sentry/nextjs": "^10.47.0",
     "@supabase/supabase-js": "^2.99.1",
     "canvas-confetti": "^1.9.4",
     "framer-motion": "^12.34.3",
