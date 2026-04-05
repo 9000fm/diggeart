@@ -424,7 +424,7 @@ export default function OnboardingOverlay({ show, onComplete, onPlayRandom }: On
         <div className={`bg-gradient-to-b from-[var(--bg-alt)] to-[var(--bg)] backdrop-blur-xl border rounded-xl shadow-2xl px-5 py-4 ${isDark ? "border-white/10" : "border-[var(--border)]/50"}`}>
           {/* Header */}
           <div className="flex items-center justify-between mb-2">
-            <span className="font-mono text-[10px] text-[var(--text-muted)] tracking-wider">
+            <span className="font-mono text-[9px] text-[var(--text-muted)] tracking-wider">
               {step + 1} / {steps.length}
             </span>
             <button
@@ -439,8 +439,8 @@ export default function OnboardingOverlay({ show, onComplete, onPlayRandom }: On
           </div>
 
           {/* Content */}
-          <p className="font-mono text-[13px] text-[var(--text)] font-bold leading-tight">{current.title}</p>
-          <p className="font-mono text-[11px] text-[var(--text-muted)] mt-1.5 leading-relaxed">{current.description}</p>
+          <p className="font-mono text-[13px] text-[var(--text)] font-bold leading-tight uppercase">{current.title}</p>
+          <p className="font-mono text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">{current.description}</p>
 
           {/* Navigation */}
           <div className="flex justify-end gap-2 mt-4">
@@ -471,8 +471,8 @@ export default function OnboardingOverlay({ show, onComplete, onPlayRandom }: On
             className="relative bg-[var(--bg-alt)]/95 backdrop-blur-xl border border-[var(--border)]/50 rounded-xl shadow-2xl px-5 py-4 max-w-[260px] w-full text-center"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="font-mono text-[13px] text-[var(--text)] font-bold">Skip tutorial?</p>
-            <p className="font-mono text-[11px] text-[var(--text-muted)] mt-1.5">You can restart it anytime from Settings.</p>
+            <p className="font-mono text-[13px] text-[var(--text)] font-bold uppercase">Skip tutorial?</p>
+            <p className="font-mono text-xs text-[var(--text-muted)] mt-1.5">You can restart it anytime from Settings.</p>
             <div className="flex gap-2 mt-4">
               <button
                 onClick={handleCancelSkip}

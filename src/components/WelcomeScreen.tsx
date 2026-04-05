@@ -44,7 +44,7 @@ export default function WelcomeScreen({ show, onDismiss }: WelcomeScreenProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <p className="font-[family-name:var(--font-display)] text-5xl text-white mb-3" style={{ textShadow: "0 0 40px rgba(255,255,255,0.3)" }}>digeart</p>
-            <p className="font-mono text-sm text-white/50 mb-8">Music discovery for diggers</p>
+            <p className="font-mono text-xs text-white/50 mb-8">Music discovery for diggers</p>
 
             {/* Gem divider */}
             <div className="flex items-center justify-center gap-3 mb-8">
@@ -58,7 +58,7 @@ export default function WelcomeScreen({ show, onDismiss }: WelcomeScreenProps) {
             </div>
 
             {/* Sign in section */}
-            <p className="font-mono text-[11px] text-white/40 mb-4">
+            <p className="font-mono text-xs text-white/40 mb-4">
               Sign in to save your finds.
             </p>
 
@@ -79,7 +79,7 @@ export default function WelcomeScreen({ show, onDismiss }: WelcomeScreenProps) {
             <button
               onClick={onDismiss}
               style={{ marginTop: "2.5rem" }}
-              className="font-mono text-[11px] text-white/30 hover:text-white/60 transition-colors uppercase tracking-wider cursor-pointer"
+              className="font-mono text-[10px] text-white/30 hover:text-white/60 transition-colors uppercase tracking-wider cursor-pointer"
             >
               Skip for now
             </button>

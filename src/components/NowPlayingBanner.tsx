@@ -369,6 +369,7 @@ export default function NowPlayingBanner({
   const [likeFillUp, setLikeFillUp] = useState(false);
   const prevIsLikedRef = useRef(isLiked);
   const likeBtnRef = useRef<HTMLButtonElement>(null);
+  const confettiedIds = useRef(new Set<string>());
 
   const likeFillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useLayoutEffect(() => {
@@ -392,21 +393,24 @@ export default function NowPlayingBanner({
           if (isAuthenticated) {
             if (!isLiked) {
               setLikeBurst(true);
-              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              const x = (rect.left + rect.width / 2) / window.innerWidth;
-              const y = (rect.top + rect.height / 2) / window.innerHeight;
-              confetti({
-                particleCount: 30,
-                spread: 35,
-                angle: 90,
-                startVelocity: 12,
-                gravity: 1.0,
-                scalar: 0.45,
-                ticks: 40,
-                colors: BURST_COLORS,
-                origin: { x, y },
-                disableForReducedMotion: true,
-              });
+              if (!confettiedIds.current.has(card.id)) {
+                confettiedIds.current.add(card.id);
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                const x = (rect.left + rect.width / 2) / window.innerWidth;
+                const y = (rect.top + rect.height / 2) / window.innerHeight;
+                confetti({
+                  particleCount: 30,
+                  spread: 35,
+                  angle: 90,
+                  startVelocity: 12,
+                  gravity: 1.0,
+                  scalar: 0.45,
+                  ticks: 40,
+                  colors: BURST_COLORS,
+                  origin: { x, y },
+                  disableForReducedMotion: true,
+                });
+              }
             }
             onToggleLike();
           } else {

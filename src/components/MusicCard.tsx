@@ -207,7 +207,7 @@ export default memo(function MusicCard({
         return (
           <div className="absolute top-2 right-2 z-10 flex flex-col gap-1 items-end min-[1152px]:opacity-0 min-[1152px]:group-hover:opacity-100 transition-opacity duration-200">
             {tags.map((t) => (
-              <span key={t.label} className={`px-2.5 py-1 ${t.color} text-white font-mono text-[11px] font-bold rounded-md shadow-sm`}>
+              <span key={t.label} className={`px-2.5 py-1 ${t.color} text-white font-mono text-[10px] font-bold tracking-wider rounded-md shadow-sm`}>
                 {t.label}
               </span>
             ))}
@@ -309,7 +309,7 @@ export default memo(function MusicCard({
             className="absolute bottom-12 right-2 z-30 w-[200px] bg-black/80 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl p-3 text-left"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="font-mono text-[11px] text-white/90 font-bold truncate">{card.album}</p>
+            <p className="font-mono text-[10px] text-white/90 font-bold truncate">{card.album}</p>
             <div className="flex items-center gap-3 mt-1.5">
               {card.viewCount != null && (
                 <span className="font-mono text-[10px] text-white/50">{formatViewCount(card.viewCount)} views</span>
@@ -330,7 +330,7 @@ export default memo(function MusicCard({
           <p className="font-mono text-sm text-white uppercase truncate leading-tight font-bold drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
             {card.name}
           </p>
-          <p className="font-mono text-[11px] text-zinc-300 uppercase truncate drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
+          <p className="font-mono text-[10px] text-zinc-300 uppercase tracking-wider truncate drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
             {card.artist}
           </p>
         </div>
@@ -340,7 +340,7 @@ export default memo(function MusicCard({
         <p className="font-mono text-xs text-white uppercase truncate leading-tight font-bold drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
           {card.name}
         </p>
-        <p className="font-mono text-[10px] text-zinc-300 uppercase truncate drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
+        <p className="font-mono text-[10px] text-zinc-300 uppercase tracking-wider truncate drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">
           {card.artist}
         </p>
       </div>

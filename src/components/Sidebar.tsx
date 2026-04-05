@@ -221,6 +221,24 @@ export default function Sidebar({
     return GENRE_LABELS.filter((label) => label.toLowerCase().includes(q));
   }, [searchQuery]);
 
+  // Lock body scroll when mobile about sheet is open
+  useEffect(() => {
+    if (showAbout && typeof window !== "undefined" && window.innerWidth < 1152) {
+      const scrollY = window.scrollY;
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = "100%";
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.width = "";
+        document.body.style.overflow = "";
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [showAbout]);
+
   // Close About on outside click or Escape
   useEffect(() => {
     if (!showAbout) return;
@@ -341,7 +359,7 @@ export default function Sidebar({
             {/* Genre pills (left) + input + tag pills (right) layered inside */}
             <div className="flex items-center absolute left-12 top-1/2 -translate-y-1/2 z-10 gap-1">
               {activeGenreLabels.map((label) => (
-                <span key={label} className="flex items-center gap-1 px-2 py-0.5 bg-[var(--border)] rounded-md font-mono text-[11px] text-[var(--text)] uppercase shrink-0">
+                <span key={label} className="flex items-center gap-1 px-2 py-0.5 bg-[var(--border)] rounded-md font-mono text-[10px] text-[var(--text)] uppercase tracking-wider shrink-0">
                   {label}
                   <button
                     onClick={() => { onGenreLabelsChange(activeGenreLabels.filter((l) => l !== label)); setSearchQuery(""); }}
@@ -360,7 +378,7 @@ export default function Sidebar({
               {activeTagFilters.map((tag) => {
                 const opt = TAG_OPTIONS.find((o) => o.value === tag);
                 return opt ? (
-                  <span key={tag} className="flex items-center gap-1 px-2 py-0.5 bg-[var(--border)] rounded-md font-mono text-[11px] text-[var(--text)] uppercase shrink-0">
+                  <span key={tag} className="flex items-center gap-1 px-2 py-0.5 bg-[var(--border)] rounded-md font-mono text-[10px] text-[var(--text)] uppercase tracking-wider shrink-0">
                     {opt.dotColor && <span className={`w-1.5 h-1.5 rounded-full ${opt.dotColor}`} />}
                     {opt.label}
                     <button
@@ -561,11 +579,11 @@ export default function Sidebar({
                 <div className="mt-2.5 pt-2 border-t border-[var(--border)]/50">
                   <p className="font-mono text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider mb-1.5">Tags</p>
                   <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500" /><span className="font-mono text-[10px] text-[var(--text-muted)] font-bold">Hot</span></span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500" /><span className="font-mono text-[10px] text-[var(--text-muted)] font-bold tracking-wider">Hot</span></span>
                     <span className="font-mono text-[10px] text-[var(--text-muted)]">Trending picks</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-pink-500" /><span className="font-mono text-[10px] text-[var(--text-muted)] font-bold">Rare</span></span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-pink-500" /><span className="font-mono text-[10px] text-[var(--text-muted)] font-bold tracking-wider">Rare</span></span>
                     <span className="font-mono text-[10px] text-[var(--text-muted)]">Hidden gems</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /><span className="font-mono text-[10px] text-[var(--text-muted)] font-bold">New</span></span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /><span className="font-mono text-[10px] text-[var(--text-muted)] font-bold tracking-wider">New</span></span>
                     <span className="font-mono text-[10px] text-[var(--text-muted)]">Added recently</span>
                   </div>
                 </div>
@@ -586,7 +604,7 @@ export default function Sidebar({
                       ["?", "Toggle this panel"],
                     ].map(([key, desc]) => (
                       <Fragment key={key}>
-                        <kbd className="font-mono text-[8px] text-[var(--text)] font-bold bg-[var(--border)]/40 px-1 py-px rounded text-center min-w-[22px]">{key}</kbd>
+                        <kbd className="font-mono text-[9px] text-[var(--text)] font-bold bg-[var(--border)]/40 px-1 py-px rounded text-center min-w-[22px]">{key}</kbd>
                         <span className="font-mono text-[10px] text-[var(--text-muted)]">{desc}</span>
                       </Fragment>
                     ))}
@@ -611,13 +629,13 @@ export default function Sidebar({
                   </div>
                 </div>
 
-                <p className="mt-2.5 pt-2 border-t border-[var(--border)]/50 font-mono text-[9px] text-[var(--text-muted)] leading-relaxed">
+                <p className="mt-2.5 pt-2 border-t border-[var(--border)]/50 font-mono text-[10px] text-[var(--text-muted)] leading-relaxed">
                   All tracks are property of their respective owners and rights holders. This platform does not claim ownership of any content.
                 </p>
 
                 <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[var(--border)]/50">
-                  <span className="font-mono text-[11px] text-[var(--text-muted)] flex items-center gap-1"><svg className="w-4 h-4 shrink-0 -mt-px" viewBox="0 0 32 32"><polygon points="8,4 24,4 30,13 16,29 2,13" fill="currentColor" opacity="0.5"/><polygon points="8,4 12,13 16,4" fill="currentColor" opacity="0.35"/><polygon points="24,4 20,13 16,4" fill="currentColor" opacity="0.45"/><polygon points="2,13 12,13 16,29" fill="currentColor" opacity="0.3"/><polygon points="30,13 20,13 16,29" fill="currentColor" opacity="0.2"/><polygon points="12,13 20,13 16,29" fill="currentColor" opacity="0.25"/><polygon points="12,13 20,13 16,4" fill="currentColor" opacity="0.5"/></svg>a <a href="https://superself.online" target="_blank" rel="noopener noreferrer" className="font-bold hover:text-[var(--text-muted)] transition-colors">superself</a> project</span>
-                  <span className="font-mono text-[11px] text-[var(--text-muted)]">v{process.env.APP_VERSION}</span>
+                  <span className="font-mono text-[10px] text-[var(--text-muted)] flex items-center gap-1"><svg className="w-4 h-4 shrink-0 -mt-px" viewBox="0 0 32 32"><polygon points="8,4 24,4 30,13 16,29 2,13" fill="currentColor" opacity="0.5"/><polygon points="8,4 12,13 16,4" fill="currentColor" opacity="0.35"/><polygon points="24,4 20,13 16,4" fill="currentColor" opacity="0.45"/><polygon points="2,13 12,13 16,29" fill="currentColor" opacity="0.3"/><polygon points="30,13 20,13 16,29" fill="currentColor" opacity="0.2"/><polygon points="12,13 20,13 16,29" fill="currentColor" opacity="0.25"/><polygon points="12,13 20,13 16,4" fill="currentColor" opacity="0.5"/></svg>a <a href="https://superself.online" target="_blank" rel="noopener noreferrer" className="font-bold text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors">superself</a> project</span>
+                  <span className="font-mono text-[9px] text-[var(--text-muted)]">v{process.env.APP_VERSION}</span>
                 </div>
               </motion.div>
             )}
@@ -648,7 +666,7 @@ export default function Sidebar({
         style={{ top: "var(--banner-height)" }}
       >
         <span
-          className="shrink-0 font-[family-name:var(--font-display)] text-4xl text-[var(--text)] select-none mr-1 cursor-pointer"
+          className="shrink-0 font-[family-name:var(--font-display)] text-5xl text-[var(--text)] select-none mr-1 cursor-pointer"
           onClick={() => { onViewChange("home"); onTagFiltersChange([]); window.scrollTo({ top: 0, behavior: "smooth" }); }}
         >
           digeart
@@ -840,6 +858,7 @@ export default function Sidebar({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             className="min-[1152px]:hidden fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm"
+            style={{ touchAction: "none" }}
             onClick={() => setShowAbout(false)}
           />
           <motion.div
@@ -861,11 +880,11 @@ export default function Sidebar({
               <div className="mt-2.5 pt-2 border-t border-[var(--border)]/50">
                 <p className="font-mono text-[10px] text-[var(--text-secondary)] font-bold uppercase tracking-wider mb-1.5">Tags</p>
                 <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500" /><span className="font-mono text-[10px] text-[var(--text-muted)] font-bold">Hot</span></span>
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-500" /><span className="font-mono text-[10px] text-[var(--text-muted)] font-bold tracking-wider">Hot</span></span>
                   <span className="font-mono text-[10px] text-[var(--text-muted)]">Trending picks</span>
-                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-pink-500" /><span className="font-mono text-[10px] text-[var(--text-muted)] font-bold">Rare</span></span>
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-pink-500" /><span className="font-mono text-[10px] text-[var(--text-muted)] font-bold tracking-wider">Rare</span></span>
                   <span className="font-mono text-[10px] text-[var(--text-muted)]">Hidden gems</span>
-                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /><span className="font-mono text-[10px] text-[var(--text-muted)] font-bold">New</span></span>
+                  <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /><span className="font-mono text-[10px] text-[var(--text-muted)] font-bold tracking-wider">New</span></span>
                   <span className="font-mono text-[10px] text-[var(--text-muted)]">Added recently</span>
                 </div>
               </div>
@@ -889,8 +908,8 @@ export default function Sidebar({
               </div>
 
               <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[var(--border)]/50">
-                <span className="font-mono text-[11px] text-[var(--text-muted)] flex items-center gap-1"><svg className="w-4 h-4 shrink-0 -mt-px" viewBox="0 0 32 32"><polygon points="8,4 24,4 30,13 16,29 2,13" fill="currentColor" opacity="0.5"/><polygon points="8,4 12,13 16,4" fill="currentColor" opacity="0.35"/><polygon points="24,4 20,13 16,4" fill="currentColor" opacity="0.45"/><polygon points="2,13 12,13 16,29" fill="currentColor" opacity="0.3"/><polygon points="30,13 20,13 16,29" fill="currentColor" opacity="0.2"/><polygon points="12,13 20,13 16,29" fill="currentColor" opacity="0.25"/><polygon points="12,13 20,13 16,4" fill="currentColor" opacity="0.5"/></svg>a <a href="https://superself.online" target="_blank" rel="noopener noreferrer" className="font-bold hover:text-[var(--text-muted)] transition-colors">superself</a> project</span>
-                <span className="font-mono text-[11px] text-[var(--text-muted)]">v{process.env.APP_VERSION}</span>
+                <span className="font-mono text-[10px] text-[var(--text-muted)] flex items-center gap-1"><svg className="w-4 h-4 shrink-0 -mt-px" viewBox="0 0 32 32"><polygon points="8,4 24,4 30,13 16,29 2,13" fill="currentColor" opacity="0.5"/><polygon points="8,4 12,13 16,4" fill="currentColor" opacity="0.35"/><polygon points="24,4 20,13 16,4" fill="currentColor" opacity="0.45"/><polygon points="2,13 12,13 16,29" fill="currentColor" opacity="0.3"/><polygon points="30,13 20,13 16,29" fill="currentColor" opacity="0.2"/><polygon points="12,13 20,13 16,29" fill="currentColor" opacity="0.25"/><polygon points="12,13 20,13 16,4" fill="currentColor" opacity="0.5"/></svg>a <a href="https://superself.online" target="_blank" rel="noopener noreferrer" className="font-bold text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors">superself</a> project</span>
+                <span className="font-mono text-[9px] text-[var(--text-muted)]">v{process.env.APP_VERSION}</span>
               </div>
             </motion.div>
           </>

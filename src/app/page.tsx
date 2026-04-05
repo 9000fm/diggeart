@@ -74,7 +74,12 @@ export default function Home() {
     }
     return 80;
   });
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(() => {
+    if (typeof window !== "undefined") {
+      return !localStorage.getItem("digeart-onboarded");
+    }
+    return true;
+  });
   const volumeRef = useRef(volume);
   volumeRef.current = volume;
   const isMutedRef = useRef(isMuted);
@@ -237,7 +242,7 @@ export default function Home() {
     setShowWelcome(false);
     if (!localStorage.getItem("digeart-onboarded")) {
       // Small delay so the UI has rendered
-      const timer = setTimeout(() => setShowOnboarding(true), 600);
+      const timer = setTimeout(() => { setShowAbout(false); setShowQueue(false); setShowOnboarding(true); }, 600);
       return () => clearTimeout(timer);
     }
   }, [isAuthenticated]);
@@ -1017,7 +1022,7 @@ export default function Home() {
         onGenreLabelsChange={setActiveGenreLabels}
         showAbout={showAbout}
         onToggleAbout={() => setShowAbout((v) => !v)}
-        onRunTutorial={() => { setShowAbout(false); setShowOnboarding(true); }}
+        onRunTutorial={() => { setShowAbout(false); setShowQueue(false); setShowOnboarding(true); }}
       />
 
       <div style={{ display: activeView === "home" ? undefined : "none" }}>

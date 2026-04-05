@@ -170,7 +170,7 @@ export default function AuthButton({ onGoToSaved, onOpenSettings, onOpenInfo, mo
       </div>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-60 bg-[var(--bg-alt)]/90 backdrop-blur-xl border border-[var(--border)]/50 rounded-xl shadow-2xl z-[70] py-3 px-4">
+        <div className="absolute right-0 top-full mt-2 w-60 bg-[var(--bg)] border border-[var(--border)] rounded-xl shadow-2xl z-[70] py-3 px-4">
           <button
             onClick={() => { signIn("google"); setOpen(false); }}
             className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 bg-[var(--border)]/50 hover:bg-[var(--border)] text-[var(--text)] rounded-lg font-mono text-xs font-medium transition-colors"

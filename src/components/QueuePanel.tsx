@@ -229,7 +229,7 @@ export default function QueuePanel({
 
       {queue.length === 0 && (
         <div className="flex items-center justify-center py-8">
-          <p className="font-mono text-[11px] uppercase text-[var(--text-muted)]">No queue</p>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-[var(--text-muted)]">No queue</p>
         </div>
       )}
     </div>
