@@ -990,7 +990,7 @@ export default function NowPlayingBanner({
       {closeButton}
 
       {/* ===== DESKTOP layout (sm+): single row, 96px ===== */}
-      <div className="h-full hidden min-[1152px]:grid items-center pl-3 pr-3 gap-3" style={{ gridTemplateColumns: "1fr min(100%, 50%) 1fr" }}>
+      <div className="h-full hidden min-[1152px]:grid items-center pl-3 pr-3 gap-3 max-w-[1600px] mx-auto w-full" style={{ gridTemplateColumns: "1fr min(100%, 50%) 1fr" }}>
         {/* LEFT: Album art + Track info */}
         <div className="flex items-center gap-2.5 min-w-0">
           {thumbUrl && (
@@ -1273,7 +1273,7 @@ export default function NowPlayingBanner({
               {/* Right: queue ··· volume + fullscreen */}
               <div className="flex items-center w-full relative z-10">
                 {queueButton}
-                <div className="flex items-center gap-1.5 ml-auto">
+                <div className="flex items-center gap-3 ml-auto mr-0.5">
                   {volumeControl(volTrackTabletRef, "hidden md:flex", tabletVolFaderRef)}
                   {fullscreenButton}
                 </div>
